@@ -84,11 +84,17 @@ export function PayrollChart() {
 
   if (loading) {
     return (
-      <ResponsiveContainer width="100%" height={300}>
-        <div className="flex items-center justify-center h-full">
-          <p className="text-muted-foreground">Loading payroll data...</p>
-        </div>
-      </ResponsiveContainer>
+      <div className="w-full h-[300px] flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">Loading payroll data...</p>
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">No payroll data available</p>
+      </div>
     );
   }
 

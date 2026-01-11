@@ -95,14 +95,17 @@ export async function GET(request: NextRequest) {
         orderBy: {
           fullName: "asc",
         },
-        take: 100, // Limit results to prevent slow loading
+        // Removed limit to get all employees for accurate count
       });
 
       // Cache for 5 minutes
       cache.set(cacheKey, employees, 300000);
     }
 
-    return NextResponse.json({ employees });
+    // Get total count separately to ensure accuracy (not affected by cache)
+    const totalCount = await prisma.employee.count();
+
+    return NextResponse.json({ employees, totalCount });
   } catch (error) {
     console.error("Error fetching employees:", error);
     return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 });

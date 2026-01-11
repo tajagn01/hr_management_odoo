@@ -10,17 +10,70 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { useState, useEffect } from "react";
 
-const data = [
-  { department: "Engineering", employees: 45, color: "#3b82f6" },
-  { department: "Marketing", employees: 28, color: "#10b981" },
-  { department: "Sales", employees: 35, color: "#f59e0b" },
-  { department: "HR", employees: 12, color: "#8b5cf6" },
-  { department: "Finance", employees: 18, color: "#ef4444" },
-  { department: "Support", employees: 22, color: "#06b6d4" },
-];
+interface DepartmentData {
+  department: string;
+  employees: number;
+  color: string;
+}
+
+const colors = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#ec4899", "#14b8a6"];
 
 export function DepartmentChart() {
+  const [data, setData] = useState<DepartmentData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDepartmentData = async () => {
+      try {
+        const employeesRes = await fetch("/api/employees");
+        const employeesData = await employeesRes.json();
+        const employees = employeesData.employees || [];
+
+        // Group employees by department
+        const departmentMap = new Map<string, number>();
+        employees.forEach((emp: any) => {
+          const dept = emp.department || "Other";
+          departmentMap.set(dept, (departmentMap.get(dept) || 0) + 1);
+        });
+
+        // Convert to chart data format
+        const chartData: DepartmentData[] = Array.from(departmentMap.entries())
+          .map(([department, count], index) => ({
+            department,
+            employees: count,
+            color: colors[index % colors.length],
+          }))
+          .sort((a, b) => b.employees - a.employees); // Sort by employee count
+
+        setData(chartData);
+      } catch (error) {
+        console.error("Error fetching department data:", error);
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDepartmentData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">Loading department data...</p>
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">No department data available</p>
+      </div>
+    );
+  }
   return (
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={data} layout="vertical">

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -43,8 +43,18 @@ const CommandMenu = dynamic(() => import("@/components/command-menu").then(mod =
   ssr: false,
 });
 
-// Mock notifications - In production, fetch from API
-const notifications = [
+interface Notification {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  time: string;
+  read: boolean;
+  role?: "ADMIN" | "EMPLOYEE" | "ALL";
+}
+
+// Initial mock notifications
+const initialNotifications: Notification[] = [
   {
     id: 1,
     type: "leave_approved",
@@ -52,6 +62,7 @@ const notifications = [
     message: "Your vacation leave for Jan 15-17 has been approved",
     time: "2 hours ago",
     read: false,
+    role: "EMPLOYEE",
   },
   {
     id: 2,
@@ -60,6 +71,7 @@ const notifications = [
     message: "John Doe requested sick leave for Jan 10",
     time: "3 hours ago",
     read: false,
+    role: "ADMIN",
   },
   {
     id: 3,
@@ -68,6 +80,7 @@ const notifications = [
     message: "Your personal leave for Jan 20 was rejected",
     time: "1 day ago",
     read: true,
+    role: "EMPLOYEE",
   },
   {
     id: 4,
@@ -76,6 +89,7 @@ const notifications = [
     message: "December 2025 salary has been credited",
     time: "2 days ago",
     read: true,
+    role: "ALL",
   },
   {
     id: 5,
@@ -84,6 +98,7 @@ const notifications = [
     message: "Don't forget to check out before leaving",
     time: "3 days ago",
     read: true,
+    role: "ALL",
   },
 ];
 
@@ -94,12 +109,64 @@ export default function Navbar() {
   const [mounted, setMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const isAdmin = pathname?.startsWith("/admin");
+  const userRole = (session?.user as any)?.role || "EMPLOYEE";
+
+  // Filter notifications based on user role
+  const filteredNotifications = notifications.filter(n =>
+    n.role === "ALL" || n.role === userRole
+  );
+
+  const unreadCount = filteredNotifications.filter(n => !n.read).length;
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Mark all notifications as read when dropdown opens
+  const handleNotificationOpen = useCallback((open: boolean) => {
+    setIsNotificationOpen(open);
+    if (open && unreadCount > 0) {
+      // Mark all notifications as read
+      setNotifications(prev =>
+        prev.map(n => ({ ...n, read: true }))
+      );
+    }
+  }, [unreadCount]);
+
+  // Listen for new notifications from real-time events
+  useEffect(() => {
+    const handleNewNotification = (event: CustomEvent) => {
+      const data = event.detail;
+      const newNotification: Notification = {
+        id: Date.now(),
+        type: data.type || "info",
+        title: data.title || "Notification",
+        message: data.message || "",
+        time: "Just now",
+        read: false,
+        role: data.role || "ALL",
+      };
+
+      // Only add if matches user role
+      if (newNotification.role === "ALL" || newNotification.role === userRole) {
+        setNotifications(prev => [newNotification, ...prev]);
+      }
+    };
+
+    window.addEventListener("notification:show", handleNewNotification as EventListener);
+    window.addEventListener("notification:admin", handleNewNotification as EventListener);
+    window.addEventListener("notification:employee", handleNewNotification as EventListener);
+
+    return () => {
+      window.removeEventListener("notification:show", handleNewNotification as EventListener);
+      window.removeEventListener("notification:admin", handleNewNotification as EventListener);
+      window.removeEventListener("notification:employee", handleNewNotification as EventListener);
+    };
+  }, [userRole]);
 
   const handleLogout = async () => {
     try {
@@ -125,7 +192,6 @@ export default function Navbar() {
 
   const userName = session?.user?.name || "User";
   const userEmail = session?.user?.email || "";
-  const userRole = (session?.user as any)?.role || "EMPLOYEE";
 
   return (
     <>
@@ -176,11 +242,11 @@ export default function Navbar() {
             </Button>
 
             {/* Notifications */}
-            <DropdownMenu>
+            <DropdownMenu open={isNotificationOpen} onOpenChange={handleNotificationOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl">
                   <Bell className="h-4 w-4" />
-                  {notifications.filter(n => !n.read).length > 0 && (
+                  {unreadCount > 0 && (
                     <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background" />
                   )}
                 </Button>
@@ -189,75 +255,94 @@ export default function Navbar() {
                 <div className="flex items-center justify-between px-4 py-3 border-b">
                   <h3 className="font-semibold">Notifications</h3>
                   <Badge variant="secondary" className="text-xs">
-                    {notifications.filter(n => !n.read).length} new
+                    {unreadCount === 0 ? "All read" : `${unreadCount} new`}
                   </Badge>
                 </div>
                 <ScrollArea className="h-80">
                   <div className="p-2">
-                    {notifications.map((notification) => {
-                      const getIcon = () => {
-                        switch (notification.type) {
-                          case "leave_approved":
-                            return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-                          case "leave_rejected":
-                            return <XCircle className="h-4 w-4 text-red-500" />;
-                          case "leave_pending":
-                            return <CalendarOff className="h-4 w-4 text-amber-500" />;
-                          case "payroll":
-                            return <DollarSign className="h-4 w-4 text-blue-500" />;
-                          case "reminder":
-                            return <AlertCircle className="h-4 w-4 text-purple-500" />;
-                          default:
-                            return <Bell className="h-4 w-4 text-muted-foreground" />;
-                        }
-                      };
+                    {filteredNotifications.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No notifications</p>
+                      </div>
+                    ) : (
+                      filteredNotifications.map((notification) => {
+                        const getIcon = () => {
+                          switch (notification.type) {
+                            case "leave_approved":
+                            case "success":
+                              return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+                            case "leave_rejected":
+                            case "error":
+                              return <XCircle className="h-4 w-4 text-red-500" />;
+                            case "leave_pending":
+                            case "warning":
+                              return <CalendarOff className="h-4 w-4 text-amber-500" />;
+                            case "payroll":
+                              return <DollarSign className="h-4 w-4 text-blue-500" />;
+                            case "reminder":
+                            case "info":
+                              return <AlertCircle className="h-4 w-4 text-purple-500" />;
+                            default:
+                              return <Bell className="h-4 w-4 text-muted-foreground" />;
+                          }
+                        };
 
-                      const getBgColor = () => {
-                        switch (notification.type) {
-                          case "leave_approved":
-                            return "bg-green-100 dark:bg-green-900/30";
-                          case "leave_rejected":
-                            return "bg-red-100 dark:bg-red-900/30";
-                          case "leave_pending":
-                            return "bg-amber-100 dark:bg-amber-900/30";
-                          case "payroll":
-                            return "bg-blue-100 dark:bg-blue-900/30";
-                          case "reminder":
-                            return "bg-purple-100 dark:bg-purple-900/30";
-                          default:
-                            return "bg-muted";
-                        }
-                      };
+                        const getBgColor = () => {
+                          switch (notification.type) {
+                            case "leave_approved":
+                            case "success":
+                              return "bg-green-100 dark:bg-green-900/30";
+                            case "leave_rejected":
+                            case "error":
+                              return "bg-red-100 dark:bg-red-900/30";
+                            case "leave_pending":
+                            case "warning":
+                              return "bg-amber-100 dark:bg-amber-900/30";
+                            case "payroll":
+                              return "bg-blue-100 dark:bg-blue-900/30";
+                            case "reminder":
+                            case "info":
+                              return "bg-purple-100 dark:bg-purple-900/30";
+                            default:
+                              return "bg-muted";
+                          }
+                        };
 
-                      return (
-                        <div
-                          key={notification.id}
-                          className={cn(
-                            "flex gap-3 p-3 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
-                            !notification.read && "bg-muted/30"
-                          )}
-                        >
-                          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", getBgColor())}>
-                            {getIcon()}
+                        return (
+                          <div
+                            key={notification.id}
+                            className={cn(
+                              "flex gap-3 p-3 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
+                              !notification.read && "bg-muted/30"
+                            )}
+                          >
+                            <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", getBgColor())}>
+                              {getIcon()}
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <p className={cn("text-sm font-medium leading-none", !notification.read && "font-semibold")}>
+                                  {notification.title}
+                                </p>
+                                {notification.role && notification.role !== "ALL" && (
+                                  <Badge variant="outline" className="text-[10px] px-1">
+                                    {notification.role === "ADMIN" ? "Admin" : "You"}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {notification.message}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                <Clock className="inline h-3 w-3 mr-1" />
+                                {notification.time}
+                              </p>
+                            </div>
                           </div>
-                          <div className="flex-1 space-y-1">
-                            <p className={cn("text-sm font-medium leading-none", !notification.read && "font-semibold")}>
-                              {notification.title}
-                            </p>
-                            <p className="text-xs text-muted-foreground line-clamp-2">
-                              {notification.message}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              <Clock className="inline h-3 w-3 mr-1" />
-                              {notification.time}
-                            </p>
-                          </div>
-                          {!notification.read && (
-                            <div className="h-2 w-2 rounded-full bg-blue-500 mt-2" />
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </ScrollArea>
                 <div className="border-t p-2">

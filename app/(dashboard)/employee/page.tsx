@@ -7,11 +7,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { 
-  CalendarCheck, 
-  CalendarPlus, 
-  User, 
-  Clock, 
+import { useRealtime } from "@/contexts/realtime-context";
+import { NotificationToast } from "@/components/notifications/toast";
+import {
+  CalendarCheck,
+  CalendarPlus,
+  User,
+  Clock,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -53,6 +55,7 @@ interface AttendanceStats {
 
 export default function EmployeePage() {
   const { data: session } = useSession();
+  const { isConnected, connectionFailed, socket } = useRealtime();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -108,20 +111,20 @@ export default function EmployeePage() {
         `/api/attendance?employeeId=${employeeId}&startDate=${today.toISOString()}&endDate=${tomorrow.toISOString()}`
       );
       const data = await res.json();
-      
+
       if (data.attendanceRecords && data.attendanceRecords.length > 0) {
         const todayRecord = data.attendanceRecords[0];
         setTodayAttendance({
           status: todayRecord.status?.toLowerCase() || "not-marked",
-          checkIn: todayRecord.checkIn ? new Date(todayRecord.checkIn).toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
+          checkIn: todayRecord.checkIn ? new Date(todayRecord.checkIn).toLocaleTimeString('en-US', {
+            hour: '2-digit',
             minute: '2-digit',
-            hour12: true 
+            hour12: true
           }) : null,
-          checkOut: todayRecord.checkOut ? new Date(todayRecord.checkOut).toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
+          checkOut: todayRecord.checkOut ? new Date(todayRecord.checkOut).toLocaleTimeString('en-US', {
+            hour: '2-digit',
             minute: '2-digit',
-            hour12: true 
+            hour12: true
           }) : null,
         });
       } else {
@@ -141,7 +144,7 @@ export default function EmployeePage() {
     try {
       const res = await fetch(`/api/leave?employeeId=${employeeId}`);
       const data = await res.json();
-      
+
       if (data.leaveRequests) {
         const pending = data.leaveRequests.filter((lr: any) => lr.status === "PENDING").length;
         const approved = data.leaveRequests.filter((lr: any) => lr.status === "APPROVED").length;
@@ -174,7 +177,7 @@ export default function EmployeePage() {
         `/api/attendance?employeeId=${employeeId}&startDate=${firstDayOfMonth.toISOString()}&endDate=${lastDayOfMonth.toISOString()}`
       );
       const data = await res.json();
-      
+
       if (data.attendanceRecords) {
         const stats: AttendanceStats = {
           present: data.attendanceRecords.filter((a: any) => a.status === "PRESENT").length,
@@ -231,6 +234,25 @@ export default function EmployeePage() {
 
   return (
     <div className="space-y-6">
+      <NotificationToast />
+      {/* Real-time connection indicator */}
+      {mounted && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className={`h-2 w-2 rounded-full ${isConnected
+              ? "bg-green-500 animate-pulse"
+              : connectionFailed
+                ? "bg-gray-400"
+                : "bg-yellow-500 animate-pulse"
+            }`} />
+          <span>
+            {isConnected
+              ? "Real-time connected"
+              : connectionFailed
+                ? "Real-time not available"
+                : "Connecting..."}
+          </span>
+        </div>
+      )}
       {/* Welcome Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between bg-linear-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white">
         <div className="flex items-center gap-4">
@@ -249,7 +271,7 @@ export default function EmployeePage() {
             {mounted && currentTime ? currentTime.toLocaleTimeString() : "--:--:--"}
           </p>
           <p className="text-blue-100">
-            {mounted && currentTime 
+            {mounted && currentTime
               ? currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
               : "Loading..."}
           </p>

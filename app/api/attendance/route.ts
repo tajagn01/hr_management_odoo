@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import {
+  emitAttendanceCheckIn,
+  emitAttendanceCheckOut,
+  emitDashboardStats
+} from "@/lib/realtime-emitter";
 
 // GET attendance records
 export async function GET(request: NextRequest) {
@@ -40,18 +45,28 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Unauthorized to view this attendance" }, { status: 403 });
       }
     } else {
-      // No employeeId provided, show current user's attendance
-      if (!user.employee) {
+      // No employeeId provided
+      if (user.role === "ADMIN") {
+        // Admins can see all attendance records when no employeeId is specified
+        // Don't filter by employeeId - show all
+      } else if (user.employee) {
+        // Employees see their own attendance
+        where.employeeId = user.employee.id;
+      } else {
         return NextResponse.json({ error: "Employee profile not found" }, { status: 404 });
       }
-      where.employeeId = user.employee.id;
     }
 
     // Date range filtering
     if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+
       where.date = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
+        gte: start,
+        lte: end,
       };
     }
 
@@ -129,6 +144,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Already checked in today" }, { status: 400 });
       }
 
+      // Get employee details for real-time event
+      const employee = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { fullName: true },
+      });
+
       // Create new attendance record with check-in
       attendance = await prisma.attendance.create({
         data: {
@@ -137,6 +158,59 @@ export async function POST(request: NextRequest) {
           status: "PRESENT",
           checkIn: now,
         },
+        include: {
+          employee: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      });
+
+      // Emit real-time event
+      emitAttendanceCheckIn({
+        employeeId,
+        employeeName: employee?.fullName || "Unknown",
+        checkInTime: now.toISOString(),
+        status: "PRESENT",
+        timestamp: now.toISOString(),
+      });
+
+      // Update dashboard stats
+      const todayStart = new Date(today);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const todayRecords = await prisma.attendance.findMany({
+        where: {
+          date: {
+            gte: todayStart,
+            lte: todayEnd,
+          },
+          status: {
+            in: ["PRESENT", "HALF_DAY"],
+          },
+        },
+      });
+
+      const totalEmployees = await prisma.employee.count();
+      const allLeaves = await prisma.leaveRequest.findMany({
+        where: { status: "PENDING" },
+      });
+      const employees = await prisma.employee.findMany({
+        include: { payroll: true },
+      });
+      const monthlyPayroll = employees.reduce((sum, emp) => {
+        return sum + (emp.payroll?.netSalary || 0);
+      }, 0);
+
+      emitDashboardStats({
+        totalEmployees,
+        presentToday: todayRecords.length,
+        pendingLeaves: allLeaves.length,
+        monthlyPayroll,
+        timestamp: now.toISOString(),
       });
     } else if (type === "checkOut") {
       if (!attendance) {
@@ -147,12 +221,38 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Already checked out today" }, { status: 400 });
       }
 
+      // Get employee details for real-time event
+      const employee = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { fullName: true },
+      });
+
+      // Calculate working hours
+      const checkInTime = attendance.checkIn ? new Date(attendance.checkIn) : now;
+      const workingHours = Math.round((now.getTime() - checkInTime.getTime()) / (1000 * 60 * 60) * 10) / 10;
+
       // Update attendance record with check-out
       attendance = await prisma.attendance.update({
         where: { id: attendance.id },
         data: {
           checkOut: now,
         },
+        include: {
+          employee: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+      });
+
+      // Emit real-time event
+      emitAttendanceCheckOut({
+        employeeId,
+        employeeName: employee?.fullName || "Unknown",
+        checkOutTime: now.toISOString(),
+        workingHours,
+        timestamp: now.toISOString(),
       });
     } else {
       return NextResponse.json({ error: "Invalid type. Must be 'checkIn' or 'checkOut'" }, { status: 400 });

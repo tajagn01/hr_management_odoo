@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2020",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "node"
+  },
+  "include": ["server.ts", "lib/socket-server.ts", "lib/realtime-emitter.ts"],
+  "exclude": ["node_modules"]
+}
+

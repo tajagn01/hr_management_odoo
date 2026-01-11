@@ -11,12 +11,14 @@ import { AttendanceChart } from "@/components/charts/attendance-chart";
 import { DepartmentChart } from "@/components/charts/department-chart";
 import { AttendancePieChart } from "@/components/charts/attendance-pie-chart";
 import { PayrollChart } from "@/components/charts/payroll-chart";
-import { 
-  Users, 
-  UserCheck, 
-  Clock, 
-  IndianRupee, 
-  TrendingUp, 
+import { useRealtime } from "@/contexts/realtime-context";
+import { NotificationToast } from "@/components/notifications/toast";
+import {
+  Users,
+  UserCheck,
+  Clock,
+  IndianRupee,
+  TrendingUp,
   TrendingDown,
   Calendar,
   FileText,
@@ -38,12 +40,13 @@ interface LeaveRequest {
 }
 
 export default function AdminPage() {
+  const { isConnected, connectionFailed, attendanceStats, updateAttendanceStats } = useRealtime();
   const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  
-  // Real-time stats
+
+  // Real-time stats - merge with real-time context
   const [stats, setStats] = useState({
     totalEmployees: 0,
     presentToday: 0,
@@ -52,6 +55,19 @@ export default function AdminPage() {
   });
 
   const [recentLeaveRequests, setRecentLeaveRequests] = useState<LeaveRequest[]>([]);
+
+  // Sync real-time stats with local state
+  useEffect(() => {
+    if (attendanceStats.presentToday > 0 || attendanceStats.totalEmployees > 0) {
+      setStats((prev) => ({
+        ...prev,
+        presentToday: attendanceStats.presentToday || prev.presentToday,
+        totalEmployees: attendanceStats.totalEmployees || prev.totalEmployees,
+        pendingLeaves: attendanceStats.pendingLeaves || prev.pendingLeaves,
+        monthlyPayroll: attendanceStats.monthlyPayroll || prev.monthlyPayroll,
+      }));
+    }
+  }, [attendanceStats]);
 
   useEffect(() => {
     setMounted(true);
@@ -79,24 +95,33 @@ export default function AdminPage() {
       ]);
 
       const employees = employeesData.employees || [];
-      const totalEmployees = employees.length;
+      // Use totalCount from API if available, otherwise fallback to employees.length
+      const totalEmployees = employeesData.totalCount !== undefined
+        ? employeesData.totalCount
+        : employees.length;
 
       // Calculate total monthly payroll from the included data
       const monthlyPayroll = employees.reduce((sum: number, emp: any) => {
         return sum + (emp.payroll?.netSalary || 0);
       }, 0);
 
-      const presentToday = attendanceData.attendanceRecords?.filter((a: any) => 
-        a.status === "PRESENT" || a.status === "HALF_DAY"
-      ).length || 0;
+      // Count present employees - check for PRESENT status or checkIn time exists
+      // Count present employees - include those with PRESENT status, HALF_DAY, or checkIn time
+      const presentToday = attendanceData.attendanceRecords?.filter((a: any) => {
+        const status = a.status?.toUpperCase();
+        // Count as present if status is PRESENT or HALF_DAY, or if they have checked in (unless explicitly absent/on leave)
+        return status === "PRESENT" ||
+          status === "HALF_DAY" ||
+          (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE" && status !== "LEAVE");
+      }).length || 0;
 
       const allLeaves = leaveData.leaveRequests || [];
       const pendingLeaves = allLeaves.filter((lr: any) => lr.status === "PENDING").length;
-      
-      // Get recent leave requests (latest 5)
+
+      // Get recent leave requests (latest 10, sorted by most recent)
       const recentLeaves = allLeaves
         .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 5);
+        .slice(0, 10);
 
       setStats({
         totalEmployees,
@@ -177,8 +202,40 @@ export default function AdminPage() {
     },
   ];
 
+  // Listen to chart refresh events
+  useEffect(() => {
+    const handleChartRefresh = (event: CustomEvent) => {
+      // Trigger chart data refresh
+      fetchDashboardData();
+    };
+
+    window.addEventListener("chart:refresh", handleChartRefresh as EventListener);
+    return () => {
+      window.removeEventListener("chart:refresh", handleChartRefresh as EventListener);
+    };
+  }, [fetchDashboardData]);
+
   return (
     <div className="space-y-6">
+      <NotificationToast />
+      {/* Real-time connection indicator */}
+      {mounted && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className={`h-2 w-2 rounded-full ${isConnected
+            ? "bg-green-500 animate-pulse"
+            : connectionFailed
+              ? "bg-gray-400"
+              : "bg-yellow-500 animate-pulse"
+            }`} />
+          <span>
+            {isConnected
+              ? "Real-time connected"
+              : connectionFailed
+                ? "Real-time not available"
+                : "Connecting..."}
+          </span>
+        </div>
+      )}
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -241,7 +298,6 @@ export default function AdminPage() {
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="payroll">Payroll</TabsTrigger>
           <TabsTrigger value="departments">Departments</TabsTrigger>
         </TabsList>
@@ -261,29 +317,6 @@ export default function AdminPage() {
               <CardHeader>
                 <CardTitle>Today&apos;s Attendance</CardTitle>
                 <CardDescription>Real-time attendance breakdown</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <AttendancePieChart />
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="attendance" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Yearly Attendance Overview</CardTitle>
-                <CardDescription>Attendance vs Leaves percentage</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <AttendanceChart />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Attendance Distribution</CardTitle>
-                <CardDescription>Current workforce status</CardDescription>
               </CardHeader>
               <CardContent>
                 <AttendancePieChart />
@@ -366,8 +399,8 @@ export default function AdminPage() {
                           request.status === "APPROVED"
                             ? "default"
                             : request.status === "REJECTED"
-                            ? "destructive"
-                            : "secondary"
+                              ? "destructive"
+                              : "secondary"
                         }
                         className="capitalize"
                       >

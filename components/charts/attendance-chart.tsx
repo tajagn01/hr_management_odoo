@@ -9,23 +9,62 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useState, useEffect } from "react";
 
-const data = [
-  { month: "Jan", attendance: 95, leaves: 5 },
-  { month: "Feb", attendance: 92, leaves: 8 },
-  { month: "Mar", attendance: 88, leaves: 12 },
-  { month: "Apr", attendance: 94, leaves: 6 },
-  { month: "May", attendance: 96, leaves: 4 },
-  { month: "Jun", attendance: 91, leaves: 9 },
-  { month: "Jul", attendance: 89, leaves: 11 },
-  { month: "Aug", attendance: 93, leaves: 7 },
-  { month: "Sep", attendance: 95, leaves: 5 },
-  { month: "Oct", attendance: 97, leaves: 3 },
-  { month: "Nov", attendance: 94, leaves: 6 },
-  { month: "Dec", attendance: 90, leaves: 10 },
-];
+interface ChartData {
+  month: string;
+  attendance: number;
+  leaves: number;
+}
 
 export function AttendanceChart() {
+  const [data, setData] = useState<ChartData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchAttendanceData = async () => {
+      try {
+        // ✅ Use optimized single API call instead of 12 separate calls
+        const currentYear = new Date().getFullYear();
+        const response = await fetch(`/api/attendance/yearly?year=${currentYear}`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.chartData && data.chartData.length > 0) {
+          setData(data.chartData);
+        } else {
+          setData([]);
+        }
+      } catch (error) {
+        console.error("Error fetching attendance data:", error);
+        setData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAttendanceData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">Loading attendance data...</p>
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="w-full h-[300px] flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">No attendance data available</p>
+      </div>
+    );
+  }
   return (
     <ResponsiveContainer width="100%" height={300}>
       <AreaChart data={data}>
