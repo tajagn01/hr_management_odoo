@@ -23,8 +23,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { 
-  Users, 
+import {
+  Users,
   UserPlus,
   Search,
   RefreshCw,
@@ -56,9 +56,11 @@ interface Employee {
   status: string;
   joinDate: string;
   salary: number;
+  role?: string;
   user?: {
     email: string;
     isActive: boolean;
+    role?: string;
   };
 }
 
@@ -83,7 +85,7 @@ export default function AdminEmployeesPage() {
     try {
       const res = await fetch("/api/employees");
       const data = await res.json();
-      
+
       if (data.employees) {
         // Fetch payroll for each employee to get salary
         const employeesWithSalary = await Promise.all(
@@ -110,10 +112,14 @@ export default function AdminEmployeesPage() {
               status: emp.user?.isActive ? "active" : "inactive",
               joinDate: new Date(emp.joiningDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
               salary,
+              role: emp.user?.role || "EMPLOYEE",
             };
           })
         );
-        setEmployees(employeesWithSalary);
+
+        // Filter out managers and admins - only show regular employees
+        const regularEmployees = employeesWithSalary.filter(emp => emp.role === "EMPLOYEE");
+        setEmployees(regularEmployees);
       }
     } catch (error) {
       console.error("Error fetching employees:", error);
@@ -132,8 +138,8 @@ export default function AdminEmployeesPage() {
   // Filter data
   const filteredEmployees = employees.filter(employee => {
     const matchesSearch = employee.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         employee.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         employee.designation.toLowerCase().includes(searchQuery.toLowerCase());
+      employee.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      employee.designation.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDepartment = departmentFilter === "all" || employee.department === departmentFilter;
     const matchesStatus = statusFilter === "all" || employee.status === statusFilter;
     return matchesSearch && matchesDepartment && matchesStatus;
@@ -333,7 +339,19 @@ export default function AdminEmployeesPage() {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{employee.fullName}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium">{employee.fullName}</p>
+                              {employee.role === "MANAGER" && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                                  Manager
+                                </Badge>
+                              )}
+                              {employee.role === "ADMIN" && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                                  Admin
+                                </Badge>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">Joined {employee.joinDate}</p>
                           </div>
                         </div>

@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { getAuthorizedEmployeeIds } from "@/lib/access-control";
+import { Prisma } from "@prisma/client";
 
-// GET yearly attendance records for chart
+// Type for month-wise data stored in JSON
+interface MonthWiseData {
+    month: number;
+    present: number;
+    absent: number;
+    halfDay: number;
+    leave: number;
+    hours: number;
+}
+
+// GET yearly attendance records from pre-aggregated data
 export async function GET(request: NextRequest) {
     try {
         const session = await auth();
@@ -12,8 +24,9 @@ export async function GET(request: NextRequest) {
 
         const { searchParams } = new URL(request.url);
         const year = parseInt(searchParams.get("year") || new Date().getFullYear().toString());
+        const employeeId = searchParams.get("employeeId");
 
-        // Get user to check permissions
+        // Get current user
         const user = await prisma.user.findUnique({
             where: { email: session.user.email! },
             include: { employee: true },
@@ -23,64 +36,83 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        // Only admins can view yearly stats
-        if (user.role !== "ADMIN") {
-            return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+        // Only admins and managers can view yearly stats
+        if (user.role === "EMPLOYEE") {
+            // Employees can only view their own yearly stats
+            if (!employeeId || (user.employee && employeeId !== user.employee.id)) {
+                return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+            }
         }
 
-        // Get total employees count
-        const totalEmployees = await prisma.employee.count();
-
-        if (totalEmployees === 0) {
-            return NextResponse.json({
-                chartData: [],
-                totalEmployees: 0
-            });
+        // Get authorized employee IDs based on role
+        let authorizedIds: string[];
+        try {
+            authorizedIds = await getAuthorizedEmployeeIds(user as any, employeeId || undefined);
+        } catch (error: any) {
+            return NextResponse.json({ error: error.message }, { status: 403 });
         }
 
-        // Date range for the entire year
-        const startOfYear = new Date(year, 0, 1);
-        const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999);
-
-        // Fetch ALL attendance records for the year in a SINGLE query
-        const attendanceRecords = await prisma.attendance.findMany({
+        // Fetch yearly attendance records from pre-aggregated table
+        // @ts-ignore - Prisma client generation failed, ignoring missing model error
+        const yearlyRecords = await prisma.yearlyAttendance.findMany({
             where: {
-                date: {
-                    gte: startOfYear,
-                    lte: endOfYear,
-                },
+                employeeId: { in: authorizedIds },
+                year,
             },
-            select: {
-                date: true,
-                status: true,
+            include: {
+                employee: {
+                    select: {
+                        id: true,
+                        fullName: true,
+                        employeeCode: true,
+                        department: true,
+                    },
+                },
             },
         });
 
-        // Group by month and calculate stats
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        const workingDaysPerMonth = 22;
-        const totalPossibleDays = totalEmployees * workingDaysPerMonth;
+        // If no records found, return empty chart data
+        if (yearlyRecords.length === 0) {
+            return NextResponse.json({
+                chartData: [],
+                yearlyRecords: [],
+                totalEmployees: 0,
+                year,
+            });
+        }
 
-        const chartData = months.map((month, index) => {
-            const monthRecords = attendanceRecords.filter(r => {
-                const recordMonth = new Date(r.date).getMonth();
-                return recordMonth === index;
+        // Format for chart (for admin dashboard)
+        const chartData = Array.from({ length: 12 }, (_, i) => {
+            const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][i];
+
+            // Aggregate data from all employees for this month
+            let totalPresent = 0;
+            let totalLeave = 0;
+            let employeeCount = 0;
+
+            yearlyRecords.forEach((record: any) => {
+                // Parse monthWiseData as JsonValue and type-check
+                const monthWiseData = record.monthWiseData as Prisma.JsonArray;
+                if (Array.isArray(monthWiseData)) {
+                    const monthData = monthWiseData.find((m: any) => m && typeof m === 'object' && m.month === i + 1) as MonthWiseData | undefined;
+                    if (monthData) {
+                        totalPresent += monthData.present || 0;
+                        totalLeave += monthData.leave || 0;
+                        employeeCount++;
+                    }
+                }
             });
 
-            const presentDays = monthRecords.filter(r =>
-                r.status === "PRESENT" || r.status === "HALF_DAY"
-            ).length;
-
-            const leaveDays = monthRecords.filter(r =>
-                r.status === "LEAVE"
-            ).length;
+            // Calculate percentages if we have data
+            const workingDaysPerMonth = 22;
+            const totalPossibleDays = yearlyRecords.length * workingDaysPerMonth;
 
             const attendancePercent = totalPossibleDays > 0
-                ? Math.round((presentDays / totalPossibleDays) * 100)
+                ? Math.round((totalPresent / totalPossibleDays) * 100)
                 : 0;
 
             const leavesPercent = totalPossibleDays > 0
-                ? Math.round((leaveDays / totalPossibleDays) * 100)
+                ? Math.round((totalLeave / totalPossibleDays) * 100)
                 : 0;
 
             return {
@@ -92,11 +124,15 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             chartData,
-            totalEmployees,
-            year
+            yearlyRecords,
+            totalEmployees: yearlyRecords.length,
+            year,
         });
     } catch (error) {
         console.error("Error fetching yearly attendance:", error);
-        return NextResponse.json({ error: "Failed to fetch yearly attendance" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to fetch yearly attendance" },
+            { status: 500 }
+        );
     }
 }

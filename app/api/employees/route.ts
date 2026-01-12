@@ -53,23 +53,64 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ employee });
     }
 
-    // Get all employees (admin only)
+    // Get all employees with role-based filtering
     const user = await prisma.user.findUnique({
       where: { email: session.user.email! },
+      include: { employee: true },
     });
 
-    if (user?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Only admins can view all employees" }, { status: 403 });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Get all employees (admin only) - with caching and optional payroll data
-    const cacheKey = includePayroll 
-      ? `employees_list_payroll_${session.user.email}`
-      : `employees_list_${session.user.email}`;
-    let employees = cache.get(cacheKey);
+    let employees;
+    let totalCount;
 
-    if (!employees) {
+    if (user.role === "ADMIN") {
+      // Admins can see all employees
+      const cacheKey = includePayroll
+        ? `employees_list_payroll_${session.user.email}`
+        : `employees_list_${session.user.email}`;
+      employees = cache.get(cacheKey);
+
+      if (!employees) {
+        employees = await prisma.employee.findMany({
+          include: {
+            user: {
+              select: {
+                email: true,
+                role: true,
+                isActive: true,
+              },
+            },
+            ...(includePayroll && {
+              payroll: {
+                select: {
+                  id: true,
+                  basicSalary: true,
+                  hra: true,
+                  allowances: true,
+                  deductions: true,
+                  netSalary: true,
+                },
+              },
+            }),
+          },
+          orderBy: {
+            fullName: "asc",
+          },
+        });
+
+        cache.set(cacheKey, employees, 300000);
+      }
+
+      totalCount = await prisma.employee.count();
+    } else if (user.role === "MANAGER" && user.employee) {
+      // Managers can see their team members only
       employees = await prisma.employee.findMany({
+        where: {
+          managerId: user.employee.id,
+        },
         include: {
           user: {
             select: {
@@ -78,7 +119,6 @@ export async function GET(request: NextRequest) {
               isActive: true,
             },
           },
-          // Include payroll data in a single query to avoid N+1 problem
           ...(includePayroll && {
             payroll: {
               select: {
@@ -95,15 +135,13 @@ export async function GET(request: NextRequest) {
         orderBy: {
           fullName: "asc",
         },
-        // Removed limit to get all employees for accurate count
       });
 
-      // Cache for 5 minutes
-      cache.set(cacheKey, employees, 300000);
+      totalCount = employees.length;
+    } else {
+      // Employees cannot view all employees
+      return NextResponse.json({ error: "Unauthorized to view all employees" }, { status: 403 });
     }
-
-    // Get total count separately to ensure accuracy (not affected by cache)
-    const totalCount = await prisma.employee.count();
 
     return NextResponse.json({ employees, totalCount });
   } catch (error) {

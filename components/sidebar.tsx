@@ -12,11 +12,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { 
-  LayoutDashboard, 
-  Users, 
-  CalendarCheck, 
-  CalendarOff, 
+import {
+  LayoutDashboard,
+  Users,
+  CalendarCheck,
+  CalendarOff,
   DollarSign,
   User,
   Menu,
@@ -39,6 +39,7 @@ interface NavGroup {
 export default function Sidebar() {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith("/admin");
+  const isManager = pathname?.startsWith("/manager");
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [pendingLeavesCount, setPendingLeavesCount] = useState(0);
   const [mounted, setMounted] = useState(false);
@@ -61,11 +62,33 @@ export default function Sidebar() {
     },
   ];
 
+  const managerGroups: NavGroup[] = [
+    {
+      title: "Overview",
+      items: [
+        { href: "/manager", label: "Dashboard", icon: LayoutDashboard },
+      ],
+    },
+    {
+      title: "Team Management",
+      items: [
+        { href: "/manager/team", label: "My Team", icon: Users },
+        { href: "/manager/attendance", label: "Team Attendance", icon: CalendarCheck },
+      ],
+    },
+    {
+      title: "My Profile",
+      items: [
+        { href: "/manager/profile", label: "Profile", icon: User },
+      ],
+    },
+  ];
+
   // ✅ FIX: Only fetch on manual navigation to leave-requests page
   // Remove automatic polling - badges update when user navigates
   useEffect(() => {
     setMounted(true);
-    
+
     // Only fetch if user is viewing leave-requests page
     if (pathname === "/admin/leave-requests") {
       const fetchPendingLeaves = async () => {
@@ -101,7 +124,7 @@ export default function Sidebar() {
     },
   ];
 
-  const groups = isAdmin ? adminGroups : employeeGroups;
+  const groups = isAdmin ? adminGroups : isManager ? managerGroups : employeeGroups;
 
   const NavItemComponent = ({ item }: { item: NavItem }) => {
     const isActive = pathname === item.href;

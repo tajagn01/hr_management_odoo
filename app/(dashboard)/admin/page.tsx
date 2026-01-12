@@ -94,20 +94,27 @@ export default function AdminPage() {
         fetch("/api/leave").then(res => res.json()),
       ]);
 
-      const employees = employeesData.employees || [];
-      // Use totalCount from API if available, otherwise fallback to employees.length
-      const totalEmployees = employeesData.totalCount !== undefined
-        ? employeesData.totalCount
-        : employees.length;
+      const allEmployees = employeesData.employees || [];
 
-      // Calculate total monthly payroll from the included data
-      const monthlyPayroll = employees.reduce((sum: number, emp: any) => {
+      // Filter out admins and managers to match the Employees page
+      const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
+
+      const totalEmployees = regularEmployees.length;
+
+      // Calculate total monthly payroll from the included data (only for regular employees)
+      const monthlyPayroll = regularEmployees.reduce((sum: number, emp: any) => {
         return sum + (emp.payroll?.netSalary || 0);
       }, 0);
 
+      // Get IDs of regular employees for filtering attendance
+      const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
+
       // Count present employees - check for PRESENT status or checkIn time exists
       // Count present employees - include those with PRESENT status, HALF_DAY, or checkIn time
+      // AND ensure they are regular employees
       const presentToday = attendanceData.attendanceRecords?.filter((a: any) => {
+        if (!regularEmployeeIds.has(a.employeeId)) return false;
+
         const status = a.status?.toUpperCase();
         // Count as present if status is PRESENT or HALF_DAY, or if they have checked in (unless explicitly absent/on leave)
         return status === "PRESENT" ||
@@ -116,10 +123,15 @@ export default function AdminPage() {
       }).length || 0;
 
       const allLeaves = leaveData.leaveRequests || [];
-      const pendingLeaves = allLeaves.filter((lr: any) => lr.status === "PENDING").length;
+      // Filter leave requests for regular employees only
+      const pendingLeaves = allLeaves.filter((lr: any) =>
+        lr.status === "PENDING" && regularEmployeeIds.has(lr.employeeId)
+      ).length;
 
       // Get recent leave requests (latest 10, sorted by most recent)
+      // Also filtered for regular employees
       const recentLeaves = allLeaves
+        .filter((lr: any) => regularEmployeeIds.has(lr.employeeId))
         .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 10);
 
@@ -300,6 +312,7 @@ export default function AdminPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="payroll">Payroll</TabsTrigger>
           <TabsTrigger value="departments">Departments</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -320,6 +333,110 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 <AttendancePieChart />
+              </CardContent>
+            </Card>
+          </div>
+
+
+
+          {/* Bottom Section - Moved inside Overview Tab */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mt-4">
+            {/* Leave Requests */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Recent Leave Requests</CardTitle>
+                    <CardDescription>Latest employee leave applications</CardDescription>
+                  </div>
+                  <Badge variant="secondary">{recentLeaveRequests.filter(r => r.status === "pending").length} Pending</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : recentLeaveRequests.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No leave requests</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentLeaveRequests.map((request) => (
+                      <div key={request.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9">
+                            <AvatarFallback className="text-xs">
+                              {request.employee.fullName.split(" ").map(n => n[0]).join("").toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium text-sm">{request.employee.fullName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {request.type} • {request.days} day{request.days > 1 ? "s" : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(request.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                          <Badge
+                            variant={
+                              request.status === "APPROVED"
+                                ? "default"
+                                : request.status === "REJECTED"
+                                  ? "destructive"
+                                  : "secondary"
+                            }
+                            className="capitalize"
+                          >
+                            {request.status === "APPROVED" && <CheckCircle2 className="h-3 w-3 mr-1" />}
+                            {request.status.toLowerCase()}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Quick Stats Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+                <CardDescription>Manage your organization</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <Button variant="outline" className="w-full justify-start" asChild>
+                    <a href="/admin/employees">
+                      <Users className="h-4 w-4 mr-2" />
+                      View All Employees
+                    </a>
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start" asChild>
+                    <a href="/admin/attendance">
+                      <UserCheck className="h-4 w-4 mr-2" />
+                      Manage Attendance
+                    </a>
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start" asChild>
+                    <a href="/admin/leave-requests">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Review Leave Requests
+                    </a>
+                  </Button>
+                  <Button variant="outline" className="w-full justify-start" asChild>
+                    <a href="/admin/payroll">
+                      <IndianRupee className="h-4 w-4 mr-2" />
+                      Process Payroll
+                    </a>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -348,110 +465,99 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
 
-      {/* Bottom Section */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Leave Requests */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Recent Leave Requests</CardTitle>
-                <CardDescription>Latest employee leave applications</CardDescription>
-              </div>
-              <Badge variant="secondary">{recentLeaveRequests.filter(r => r.status === "pending").length} Pending</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : recentLeaveRequests.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No leave requests</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {recentLeaveRequests.map((request) => (
-                  <div key={request.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
-                        <AvatarFallback className="text-xs">
-                          {request.employee.fullName.split(" ").map(n => n[0]).join("").toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-sm">{request.employee.fullName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {request.type} • {request.days} day{request.days > 1 ? "s" : ""}
-                        </p>
-                      </div>
+        <TabsContent value="reports" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>System Reports & Aggregation</CardTitle>
+              <CardDescription>Manually trigger attendance aggregation jobs</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
+                      <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(request.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                      <Badge
-                        variant={
-                          request.status === "APPROVED"
-                            ? "default"
-                            : request.status === "REJECTED"
-                              ? "destructive"
-                              : "secondary"
-                        }
-                        className="capitalize"
-                      >
-                        {request.status === "APPROVED" && <CheckCircle2 className="h-3 w-3 mr-1" />}
-                        {request.status.toLowerCase()}
-                      </Badge>
+                    <div>
+                      <h3 className="font-semibold">Monthly Aggregation</h3>
+                      <p className="text-sm text-muted-foreground">Calculate monthly attendance stats for all employees</p>
                     </div>
                   </div>
-                ))}
+                  <Button
+                    onClick={async () => {
+                      const btn = document.getElementById('btn-monthly-agg') as HTMLButtonElement;
+                      if (btn) {
+                        btn.disabled = true;
+                        btn.innerText = "Running...";
+                      }
+                      try {
+                        const res = await fetch("/api/cron/aggregate-attendance?type=monthly");
+                        const data = await res.json();
+                        if (res.ok) alert(data.message);
+                        else alert("Error: " + data.error);
+                      } catch (e) {
+                        alert("Failed to trigger aggregation");
+                      } finally {
+                        if (btn) {
+                          btn.disabled = false;
+                          btn.innerText = "Run Monthly Aggregation";
+                        }
+                      }
+                    }}
+                    id="btn-monthly-agg"
+                    className="w-full"
+                  >
+                    Run Monthly Aggregation
+                  </Button>
+                </div>
+
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
+                      <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Yearly Aggregation</h3>
+                      <p className="text-sm text-muted-foreground">Calculate yearly attendance summaries for all employees</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={async () => {
+                      const btn = document.getElementById('btn-yearly-agg') as HTMLButtonElement;
+                      if (btn) {
+                        btn.disabled = true;
+                        btn.innerText = "Running...";
+                      }
+                      try {
+                        const res = await fetch("/api/cron/aggregate-attendance?type=yearly");
+                        const data = await res.json();
+                        if (res.ok) alert(data.message);
+                        else alert("Error: " + data.error);
+                      } catch (e) {
+                        alert("Failed to trigger aggregation");
+                      } finally {
+                        if (btn) {
+                          btn.disabled = false;
+                          btn.innerText = "Run Yearly Aggregation";
+                        }
+                      }
+                    }}
+                    id="btn-yearly-agg"
+                    className="w-full"
+                  >
+                    Run Yearly Aggregation
+                  </Button>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
-        {/* Quick Stats Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Manage your organization</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <Button variant="outline" className="w-full justify-start" asChild>
-                <a href="/admin/employees">
-                  <Users className="h-4 w-4 mr-2" />
-                  View All Employees
-                </a>
-              </Button>
-              <Button variant="outline" className="w-full justify-start" asChild>
-                <a href="/admin/attendance">
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Manage Attendance
-                </a>
-              </Button>
-              <Button variant="outline" className="w-full justify-start" asChild>
-                <a href="/admin/leave-requests">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Review Leave Requests
-                </a>
-              </Button>
-              <Button variant="outline" className="w-full justify-start" asChild>
-                <a href="/admin/payroll">
-                  <IndianRupee className="h-4 w-4 mr-2" />
-                  Process Payroll
-                </a>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
-    </div>
+
+    </div >
   );
 }

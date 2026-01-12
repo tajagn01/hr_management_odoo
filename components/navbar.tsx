@@ -221,7 +221,11 @@ export default function Navbar() {
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <div className="w-full h-10 pl-10 pr-4 rounded-xl border border-border bg-muted/50 text-sm flex items-center text-muted-foreground hover:bg-muted transition-colors cursor-pointer">
-                Search anything...
+                {userRole === "ADMIN"
+                  ? "Search employees, attendance, payroll..."
+                  : userRole === "MANAGER"
+                    ? "Search team, attendance..."
+                    : "Search attendance, leave, payroll..."}
               </div>
               <kbd className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
                 <span className="text-xs">⌘</span>K
