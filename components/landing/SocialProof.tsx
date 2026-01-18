@@ -1,6 +1,6 @@
 export default function SocialProof() {
     return (
-        <section className="py-10">
+        <section className="py-10 bg-transparent">
             <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16">
                 <div className="flex flex-col md:flex-row items-center justify-between gap-8 text-center md:text-left">
                     <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider shrink-0">

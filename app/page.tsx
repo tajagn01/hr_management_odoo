@@ -35,12 +35,12 @@ export default function Home() {
     }, []);
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 overflow-x-hidden">
+        <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-50 to-white dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 overflow-x-hidden">
             {/* Fixed Navigation - Minimal, fast loading */}
             <nav
                 className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled
-                        ? "bg-white/80 dark:bg-slate-950/90 backdrop-blur-xl shadow-sm border-b border-slate-200/50 dark:border-slate-800/50"
-                        : "bg-transparent"
+                    ? "bg-white/80 dark:bg-slate-950/90 backdrop-blur-xl shadow-sm border-b border-slate-200/50 dark:border-slate-800/50"
+                    : "bg-transparent"
                     }`}
             >
                 <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 py-4">

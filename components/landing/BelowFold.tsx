@@ -152,9 +152,10 @@ export default function BelowFold() {
     return (
         <>
             {/* Features Section */}
-            <section id="features" className="py-20 sm:py-24 md:py-32 relative overflow-hidden">
-                <div className="absolute inset-0 bg-slate-50 dark:bg-slate-950">
-                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/20 via-transparent to-transparent dark:from-blue-900/20"></div>
+            <section id="features" className="py-20 sm:py-24 md:py-32 relative overflow-hidden bg-transparent">
+                {/* Seamless fade overlay instead of hard background */}
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-50/50 to-slate-50 dark:via-slate-950/50 dark:to-slate-950">
+                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/10 via-transparent to-transparent dark:from-blue-900/10"></div>
                 </div>
 
                 <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 relative">
@@ -163,9 +164,9 @@ export default function BelowFold() {
                             <Zap className="w-4 h-4 mr-2" />
                             Powerful Features
                         </Badge>
-                        <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6">
+                        <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white">
                             Everything you need to
-                            <span className="block bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+                            <span className="block bg-gradient-to-r from-blue-600 to-violet-600 dark:from-blue-400 dark:to-violet-400 bg-clip-text text-transparent pb-2 leading-tight">
                                 manage your workforce
                             </span>
                         </h2>
@@ -177,16 +178,16 @@ export default function BelowFold() {
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                         {features.map((feature, i) => (
                             <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 100}ms` }}>
-                                <Card className="group hover:shadow-xl transition-all duration-300 hover:-translate-y-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden relative h-full">
-                                    <div className={`absolute top-0 left-0 w-1 h-full bg-gradient-to-b ${feature.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}></div>
-                                    <CardHeader>
-                                        <div className={`inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br ${feature.color} mb-4 group-hover:scale-110 transition-transform shadow-lg`}>
+                                <Card className="group hover:shadow-2xl hover:shadow-blue-500/10 hover:border-blue-500/20 transition-all duration-300 hover:-translate-y-1 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 backdrop-blur-sm overflow-hidden relative h-full">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-transparent dark:from-blue-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                                    <CardHeader className="relative z-10">
+                                        <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.color} mb-4 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-lg`}>
                                             <feature.icon className="w-7 h-7 text-white" />
                                         </div>
                                         <CardTitle className="text-xl group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{feature.title}</CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <CardDescription className="text-base leading-relaxed">
+                                    <CardContent className="relative z-10">
+                                        <CardDescription className="text-base leading-relaxed text-slate-600 dark:text-slate-400">
                                             {feature.desc}
                                         </CardDescription>
                                     </CardContent>
@@ -221,8 +222,8 @@ export default function BelowFold() {
                             <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 100}ms` }}>
                                 <Card
                                     className={`relative transition-all duration-300 h-full flex flex-col ${plan.highlighted
-                                            ? "border-blue-500 shadow-2xl lg:scale-105 lg:-my-4 bg-white dark:bg-slate-900 z-10"
-                                            : "hover:shadow-xl hover:-translate-y-1 bg-white/50 dark:bg-slate-900/50 backdrop-blur"
+                                        ? "border-blue-500 shadow-2xl lg:scale-105 lg:-my-4 bg-white dark:bg-slate-900 z-10"
+                                        : "hover:shadow-xl hover:-translate-y-1 bg-white/50 dark:bg-slate-900/50 backdrop-blur"
                                         }`}
                                 >
                                     {plan.badge && (
@@ -282,7 +283,7 @@ export default function BelowFold() {
 
             {/* FAQ Section */}
             <section id="faq" className="py-20 sm:py-24 md:py-32">
-                <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 max-w-3xl">
+                <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 max-w-4xl">
                     <div className="text-center mb-16 animate-fade-in-up">
                         <Badge variant="outline" className="mb-4 border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400">
                             <Sparkles className="w-4 h-4 mr-2" />
