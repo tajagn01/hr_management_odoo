@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,39 +23,45 @@ import {
 const features = [
     {
         icon: Users,
+        number: "400+",
+        label: "companies automated",
         title: "Employee Management",
-        desc: "Centralized employee database with complete profile management, documents, and org charts.",
-        color: "from-blue-500 to-cyan-500"
+        desc: "One source of truth for all your people data."
     },
     {
         icon: Clock,
+        number: "99.7%",
+        label: " accuracy rate",
         title: "Smart Attendance",
-        desc: "Real-time check-in/out with geolocation, work hour tracking, and overtime calculations.",
-        color: "from-purple-500 to-pink-500"
+        desc: "GPS check-ins. Auto overtime. Zero disputes."
     },
     {
         icon: Calendar,
+        number: "<5sec",
+        label: "approval time",
         title: "Leave Management",
-        desc: "Streamlined leave requests, approval workflows, and automatic balance tracking.",
-        color: "from-orange-500 to-red-500"
+        desc: "Request, approve, track. All in one click."
     },
     {
         icon: CreditCard,
-        title: "Payroll Processing",
-        desc: "Automated salary calculations with tax deductions, allowances, and payment processing.",
-        color: "from-green-500 to-emerald-500"
+        number: "0",
+        label: "payroll errors",
+        title: "Payroll Automation",
+        desc: "Calculations so accurate, you'll forget they exist."
     },
     {
         icon: BarChart3,
+        number: "24/7",
+        label: "live insights",
         title: "Analytics & Reports",
-        desc: "Comprehensive dashboards with actionable insights and exportable reports.",
-        color: "from-indigo-500 to-violet-500"
+        desc: "Real-time dashboards that actually tell you something."
     },
     {
         icon: Shield,
+        number: "100%",
+        label: "compliant",
         title: "Enterprise Security",
-        desc: "Bank-grade encryption, role-based access, and complete audit trails.",
-        color: "from-slate-500 to-zinc-500"
+        desc: "Bank-level encryption. Sleep better at night."
     }
 ];
 
@@ -62,7 +70,8 @@ const plans = [
         name: "Starter",
         price: "₹999",
         period: "/month",
-        description: "Perfect for small teams just getting started",
+        yearlyPrice: "₹799",
+        description: "Perfect for small teams getting started",
         features: [
             "Up to 25 Employees",
             "Basic Attendance Tracking",
@@ -78,6 +87,7 @@ const plans = [
         name: "Professional",
         price: "₹2,999",
         period: "/month",
+        yearlyPrice: "₹2,499",
         description: "Best for growing businesses",
         features: [
             "Up to 100 Employees",
@@ -98,6 +108,7 @@ const plans = [
         name: "Enterprise",
         price: "Custom",
         period: "",
+        yearlyPrice: "Custom",
         description: "For large organizations with custom needs",
         features: [
             "Unlimited Employees",
@@ -149,42 +160,71 @@ const faqs = [
 ];
 
 export default function BelowFold() {
+    const [isYearly, setIsYearly] = useState(false);
+
     return (
         <>
             {/* Features Section */}
-            <section id="features" className="py-20 sm:py-24 md:py-32 relative overflow-hidden bg-transparent">
-                {/* Seamless fade overlay instead of hard background */}
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-50/50 to-slate-50 dark:via-slate-950/50 dark:to-slate-950">
-                    <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-100/10 via-transparent to-transparent dark:from-blue-900/10"></div>
-                </div>
+            <section id="features" className="py-20 sm:py-24 md:py-32 relative overflow-hidden">
+                {/* Background with gradient */}
+                <div className="absolute inset-0 bg-gradient-to-b from-white via-slate-50/80 to-white dark:from-slate-900 dark:via-slate-950/80 dark:to-slate-900" />
+
+                {/* Radial gradient accent */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[600px] bg-gradient-to-r from-blue-100/20 via-violet-100/20 to-transparent dark:from-blue-900/10 dark:via-violet-900/10 blur-3xl rounded-full pointer-events-none" />
 
                 <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 relative">
-                    <div className="text-center mb-16 animate-fade-in-up">
-                        <Badge variant="outline" className="mb-4 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "-100px" }}
+                        transition={{ duration: 0.6 }}
+                        className="text-center mb-16"
+                    >
+                        <Badge variant="outline" className="mb-4 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 px-4 py-1.5">
                             <Zap className="w-4 h-4 mr-2" />
                             Powerful Features
                         </Badge>
                         <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white">
                             Everything you need to
-                            <span className="block bg-gradient-to-r from-blue-600 to-violet-600 dark:from-blue-400 dark:to-violet-400 bg-clip-text text-transparent pb-2 leading-tight">
+                            <span className="block bg-gradient-to-r from-blue-600 to-violet-600 dark:from-blue-400 dark:to-violet-400 bg-clip-text text-transparent mt-2 leading-tight">
                                 manage your workforce
                             </span>
                         </h2>
-                        <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-                            Streamline your HR operations with our comprehensive suite of tools designed for modern businesses.
+                        <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+                            Streamline your HR operations with tools designed for modern businesses.
                         </p>
-                    </div>
+                    </motion.div>
 
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
                         {features.map((feature, i) => (
-                            <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 100}ms` }}>
-                                <Card className="group hover:shadow-2xl hover:shadow-blue-500/10 hover:border-blue-500/20 transition-all duration-300 hover:-translate-y-1 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 backdrop-blur-sm overflow-hidden relative h-full">
-                                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-transparent dark:from-blue-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true, margin: "-100px" }}
+                                transition={{ duration: 0.5, delay: i * 0.08 }}
+                                whileHover={{ y: -8, scale: 1.02 }}
+                                className="group"
+                            >
+                                <Card className="relative h-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border-slate-200 dark:border-slate-700 hover:border-blue-500/30 dark:hover:border-blue-500/30 hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-500 overflow-hidden">
+                                    {/* Hover gradient overlay */}
+                                    <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-emerald-50/50 dark:from-blue-900/10 dark:via-transparent dark:to-emerald-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
                                     <CardHeader className="relative z-10">
-                                        <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br ${feature.color} mb-4 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 shadow-lg`}>
-                                            <feature.icon className="w-7 h-7 text-white" />
+                                        <feature.icon className="w-12 h-12 text-slate-900 dark:text-white mb-4" />
+
+                                        <div className="mb-4">
+                                            <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">
+                                                {feature.number}
+                                            </div>
+                                            <div className="text-sm text-slate-500 dark:text-slate-400">
+                                                {feature.label}
+                                            </div>
                                         </div>
-                                        <CardTitle className="text-xl group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{feature.title}</CardTitle>
+
+                                        <CardTitle className="text-xl mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300">
+                                            {feature.title}
+                                        </CardTitle>
                                     </CardHeader>
                                     <CardContent className="relative z-10">
                                         <CardDescription className="text-base leading-relaxed text-slate-600 dark:text-slate-400">
@@ -192,60 +232,100 @@ export default function BelowFold() {
                                         </CardDescription>
                                     </CardContent>
                                 </Card>
-                            </div>
+                            </motion.div>
                         ))}
                     </div>
                 </div>
             </section>
 
             {/* Pricing Section */}
-            <section id="pricing" className="py-20 sm:py-24 md:py-32">
-                <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16">
-                    <div className="text-center mb-16 animate-fade-in-up">
-                        <Badge variant="outline" className="mb-4 border-green-200 dark:border-green-800 text-green-600 dark:text-green-400">
+            <section id="pricing" className="py-20 sm:py-24 md:py-32 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950" />
+                <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 relative">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "-100px" }}
+                        transition={{ duration: 0.6 }}
+                        className="text-center mb-12"
+                    >
+                        <Badge variant="outline" className="mb-4 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 px-4 py-1.5">
                             <CreditCard className="w-4 h-4 mr-2" />
                             Simple Pricing
                         </Badge>
-                        <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6">
+                        <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white">
                             Plans that scale with
-                            <span className="block bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                            <span className="block mt-2 bg-gradient-to-r from-emerald-600 to-blue-600 dark:from-emerald-400 dark:to-blue-400 bg-clip-text text-transparent">
                                 your business
                             </span>
                         </h2>
-                        <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
+                        <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-8">
                             Choose the perfect plan for your team. All plans include a 14-day free trial.
                         </p>
-                    </div>
+                        <div className="inline-flex items-center gap-4 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl">
+                            <button
+                                onClick={() => setIsYearly(false)}
+                                className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-300 ${!isYearly ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-md' : 'text-slate-600 dark:text-slate-400'}`}
+                            >
+                                Monthly
+                            </button>
+                            <button
+                                onClick={() => setIsYearly(true)}
+                                className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-300 ${isYearly ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-md' : 'text-slate-600 dark:text-slate-400'}`}
+                            >
+                                Yearly
+                                <span className="ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">Save 20%</span>
+                            </button>
+                        </div>
+                    </motion.div>
 
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
                         {plans.map((plan, i) => (
-                            <div key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 100}ms` }}>
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true, margin: "-100px" }}
+                                transition={{ duration: 0.5, delay: i * 0.1 }}
+                                whileHover={{ y: -4 }}
+                            >
                                 <Card
                                     className={`relative transition-all duration-300 h-full flex flex-col ${plan.highlighted
-                                        ? "border-blue-500 shadow-2xl lg:scale-105 lg:-my-4 bg-white dark:bg-slate-900 z-10"
-                                        : "hover:shadow-xl hover:-translate-y-1 bg-white/50 dark:bg-slate-900/50 backdrop-blur"
+                                        ? "border-2 border-blue-500 shadow-2xl lg:scale-105 bg-white dark:bg-slate-800 z-10"
+                                        : "border border-slate-200 dark:border-slate-700 hover:shadow-xl bg-white/60 dark:bg-slate-800/60 backdrop-blur"
                                         }`}
                                 >
                                     {plan.badge && (
-                                        <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-violet-600 text-white border-none px-4 py-1">
-                                            {plan.badge}
-                                        </Badge>
+                                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20">
+                                            <Badge className="bg-gradient-to-r from-blue-600 to-violet-600 text-white border-none px-4 py-1.5 shadow-lg">
+                                                {plan.badge}
+                                            </Badge>
+                                        </div>
+                                    )}
+                                    {plan.highlighted && (
+                                        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-violet-500/5 to-transparent rounded-lg pointer-events-none" />
                                     )}
 
-                                    <CardHeader>
-                                        <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                                        <CardDescription className="text-base mt-2">
+                                    <CardHeader className="relative">
+                                        <CardTitle className="text-2xl text-slate-900 dark:text-white">{plan.name}</CardTitle>
+                                        <CardDescription className="text-base mt-2 text-slate-600 dark:text-slate-400">
                                             {plan.description}
                                         </CardDescription>
                                     </CardHeader>
 
-                                    <CardContent className="flex-1 flex flex-col">
-                                        <div className="mb-6">
-                                            <span className="text-4xl md:text-5xl font-bold">
-                                                {plan.price}
-                                            </span>
+                                    <CardContent className="flex-1 flex flex-col relative">
+                                        <div className="mb-8">
+                                            <motion.span
+                                                key={isYearly ? 'yearly' : 'monthly'}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ duration: 0.3 }}
+                                                className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-white"
+                                            >
+                                                {isYearly ? (plan.yearlyPrice || plan.price) : plan.price}
+                                            </motion.span>
                                             {plan.period && (
-                                                <span className="text-base text-muted-foreground ml-1">
+                                                <span className="text-base text-slate-600 dark:text-slate-400 ml-1">
                                                     {plan.period}
                                                 </span>
                                             )}
@@ -275,9 +355,94 @@ export default function BelowFold() {
                                         </Link>
                                     </CardContent>
                                 </Card>
-                            </div>
+                            </motion.div>
                         ))}
                     </div>
+                </div>
+            </section>
+
+            {/* CTA Section */}
+            <section className="py-20 sm:py-24 md:py-32 relative overflow-hidden">
+                {/* Dark gradient background */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-700 to-violet-800 dark:from-blue-900 dark:via-indigo-950 dark:to-violet-950" />
+
+                {/*Animated gradient orbs */}
+                <motion.div
+                    className="absolute top-10 left-10 w-96 h-96 bg-white/10 rounded-full blur-3xl"
+                    animate={{
+                        scale: [1, 1.2, 1],
+                        opacity: [0.3, 0.5, 0.3]
+                    }}
+                    transition={{
+                        duration: 8,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                    }}
+                />
+                <motion.div
+                    className="absolute bottom-10 right-10 w-96 h-96 bg-violet-400/20 rounded-full blur-3xl"
+                    animate={{
+                        scale: [1.2, 1, 1.2],
+                        opacity: [0.4, 0.6, 0.4]
+                    }}
+                    transition={{
+                        duration: 10,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                    }}
+                />
+
+                <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 relative z-10">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "-100px" }}
+                        transition={{ duration: 0.6 }}
+                        className="max-w-4xl mx-auto text-center"
+                    >
+                        <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-white">
+                            Built for teams of
+                            <span className="block mt-2">every size and stage</span>
+                        </h2>
+                        <p className="text-lg sm:text-xl text-blue-100 mb-10 max-w-2xl mx-auto leading-relaxed">
+                            From startups to enterprises, DayFlow grows with you. Start free, scale as needed.
+                        </p>
+
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                            <Link href="/register">
+                                <motion.div
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    <Button size="lg" className="w-full sm:w-auto h-14 px-10 text-lg font-semibold bg-white hover:bg-slate-50 text-blue-600 shadow-2xl group">
+                                        Start Free Trial
+                                        <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                                    </Button>
+                                </motion.div>
+                            </Link>
+                            <p className="text-sm text-blue-200">
+                                No credit card required • 14-day free trial
+                            </p>
+                        </div>
+
+                        {/* Trust indicators */}
+                        <div className="mt-12 flex flex-wrap justify-center gap-8 items-center opacity-70">
+                            <div className="text-center">
+                                <div className="text-2xl font-bold text-white mb-1">5,000+</div>
+                                <div className="text-sm text-blue-200">Companies</div>
+                            </div>
+                            <div className="h-12 w-px bg-white/20" />
+                            <div className="text-center">
+                                <div className="text-2xl font-bold text-white mb-1">99.9%</div>
+                                <div className="text-sm text-blue-200">Uptime</div>
+                            </div>
+                            <div className="h-12 w-px bg-white/20" />
+                            <div className="text-center">
+                                <div className="text-2xl font-bold text-white mb-1">4.9/5</div>
+                                <div className="text-sm text-blue-200">Rating</div>
+                            </div>
+                        </div>
+                    </motion.div>
                 </div>
             </section>
 
@@ -310,44 +475,6 @@ export default function BelowFold() {
                                 </AccordionItem>
                             ))}
                         </Accordion>
-                    </div>
-                </div>
-            </section>
-
-            {/* CTA Section */}
-            <section className="py-20 sm:py-24 md:py-32">
-                <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16">
-                    <div className="animate-fade-in-up">
-                        <Card className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 border-none text-white shadow-2xl shadow-blue-900/20">
-                            {/* Background Pattern */}
-                            <div className="absolute inset-0 opacity-30">
-                                <div className="absolute top-0 left-0 w-72 h-72 bg-white/10 rounded-full blur-3xl"></div>
-                                <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
-                            </div>
-
-                            <CardContent className="relative text-center max-w-3xl mx-auto py-16 sm:py-20">
-                                <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-white">
-                                    Ready to transform your HR?
-                                </h2>
-                                <p className="text-lg sm:text-xl text-blue-100 mb-10 max-w-2xl mx-auto">
-                                    Join thousands of companies already using DayFlow to streamline their HR operations and boost productivity.
-                                </p>
-
-                                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                                    <Link href="/register">
-                                        <Button size="lg" variant="secondary" className="w-full sm:w-auto text-base font-semibold h-14 group bg-white text-blue-600 hover:bg-blue-50 px-10 shadow-lg">
-                                            Start Your Free Trial
-                                            <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                                        </Button>
-                                    </Link>
-                                    <Link href="#pricing">
-                                        <Button size="lg" variant="outline" className="w-full sm:w-auto text-base font-semibold text-white border-2 border-white/50 hover:bg-white/20 hover:border-white/70 h-14 px-10">
-                                            View Pricing
-                                        </Button>
-                                    </Link>
-                                </div>
-                            </CardContent>
-                        </Card>
                     </div>
                 </div>
             </section>

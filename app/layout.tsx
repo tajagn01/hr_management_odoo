@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
+import "./animations.css";
 import NextAuthProvider from "@/components/session-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { RealtimeProvider } from "@/contexts/realtime-context";

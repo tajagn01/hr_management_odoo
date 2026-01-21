@@ -17,6 +17,21 @@ const SocialProof = dynamic(() => import("@/components/landing/SocialProof"), {
     ssr: true,
 });
 
+const ProblemSolution = dynamic(() => import("@/components/landing/ProblemSolution"), {
+    ssr: false,
+    loading: () => <div className="min-h-screen bg-slate-900" />
+});
+
+const Workflow = dynamic(() => import("@/components/landing/Workflow"), {
+    ssr: false,
+    loading: () => <div className="min-h-screen bg-slate-50 dark:bg-slate-950" />
+});
+
+const UseCases = dynamic(() => import("@/components/landing/UseCases"), {
+    ssr: false,
+    loading: () => <div className="min-h-screen bg-slate-50 dark:bg-slate-950" />
+});
+
 const BelowFold = dynamic(() => import("@/components/landing/BelowFold"), {
     loading: () => <div className="min-h-screen bg-slate-50 dark:bg-slate-950" />,
     ssr: false
@@ -30,8 +45,15 @@ export default function Home() {
         const handleScroll = () => {
             setIsScrolled(window.scrollY > 20);
         };
+
+        // Smooth scroll behavior
+        document.documentElement.style.scrollBehavior = 'smooth';
+
         window.addEventListener("scroll", handleScroll, { passive: true });
-        return () => window.removeEventListener("scroll", handleScroll);
+        return () => {
+            window.removeEventListener("scroll", handleScroll);
+            document.documentElement.style.scrollBehavior = 'auto';
+        };
     }, []);
 
     return (
@@ -137,13 +159,22 @@ export default function Home() {
                 </div>
             </nav>
 
-            {/* Hero Section - Static, optimized (CSS animations only) */}
+            {/* Hero Section - Static, optimized (NO CHANGES) */}
             <Hero />
 
-            {/* Social Proof - SSR enabled for SEO */}
+            {/* 01 - Social Proof - Real teams, real results */}
             <SocialProof />
 
-            {/* Below-fold content - Lazy loaded */}
+            {/* 02 - Problem → Solution Section */}
+            <ProblemSolution />
+
+            {/* Workflow Section - In the middle */}
+            <Workflow />
+
+            {/* Use Cases Section - In the middle */}
+            <UseCases />
+
+            {/* Below-fold content - Features, Pricing, CTA, FAQ, Footer */}
             <BelowFold />
         </div>
     );
