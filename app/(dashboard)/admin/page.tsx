@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo, memo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +12,7 @@ import { AttendancePieChart } from "@/components/charts/attendance-pie-chart";
 import { PayrollChart } from "@/components/charts/payroll-chart";
 import { useRealtime } from "@/contexts/realtime-context";
 import { NotificationToast } from "@/components/notifications/toast";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   Users,
   UserCheck,
@@ -22,52 +22,21 @@ import {
   TrendingDown,
   Calendar,
   FileText,
-  AlertCircle,
   CheckCircle2,
   RefreshCw,
-  XCircle,
-  Banknote,
   Loader2
 } from "lucide-react";
 
-interface LeaveRequest {
-  id: string;
-  employee: { fullName: string };
-  type: string;
-  days: number;
-  status: string;
-  createdAt: string;
-}
+// Memoize sub-components to prevent re-renders on parent state changes
+const MemoizedAttendanceChart = memo(AttendanceChart);
+const MemoizedDepartmentChart = memo(DepartmentChart);
+const MemoizedAttendancePieChart = memo(AttendancePieChart);
+const MemoizedPayrollChart = memo(PayrollChart);
 
 export default function AdminPage() {
-  const { isConnected, connectionFailed, attendanceStats, updateAttendanceStats } = useRealtime();
+  const { isConnected, connectionFailed, attendanceStats } = useRealtime();
   const [mounted, setMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  // Real-time stats - merge with real-time context
-  const [stats, setStats] = useState({
-    totalEmployees: 0,
-    presentToday: 0,
-    pendingLeaves: 0,
-    monthlyPayroll: 0,
-  });
-
-  const [recentLeaveRequests, setRecentLeaveRequests] = useState<LeaveRequest[]>([]);
-
-  // Sync real-time stats with local state
-  useEffect(() => {
-    if (attendanceStats.presentToday > 0 || attendanceStats.totalEmployees > 0) {
-      setStats((prev) => ({
-        ...prev,
-        presentToday: attendanceStats.presentToday || prev.presentToday,
-        totalEmployees: attendanceStats.totalEmployees || prev.totalEmployees,
-        pendingLeaves: attendanceStats.pendingLeaves || prev.pendingLeaves,
-        monthlyPayroll: attendanceStats.monthlyPayroll || prev.monthlyPayroll,
-      }));
-    }
-  }, [attendanceStats]);
 
   useEffect(() => {
     setMounted(true);
@@ -78,87 +47,122 @@ export default function AdminPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // ✅ FIX: Fetch all dashboard data in PARALLEL (not sequential)
-  const fetchDashboardData = useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-
-      // ✅ PARALLEL FETCHING: All 3 requests execute simultaneously
-      const [employeesData, attendanceData, leaveData] = await Promise.all([
-        fetch("/api/employees?includePayroll=true").then(res => res.json()),
-        fetch(`/api/attendance?startDate=${today.toISOString()}&endDate=${tomorrow.toISOString()}`).then(res => res.json()),
-        fetch("/api/leave").then(res => res.json()),
-      ]);
-
-      const allEmployees = employeesData.employees || [];
-
-      // Filter out admins and managers to match the Employees page
-      const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
-
-      const totalEmployees = regularEmployees.length;
-
-      // Calculate total monthly payroll from the included data (only for regular employees)
-      const monthlyPayroll = regularEmployees.reduce((sum: number, emp: any) => {
-        return sum + (emp.payroll?.netSalary || 0);
-      }, 0);
-
-      // Get IDs of regular employees for filtering attendance
-      const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
-
-      // Count present employees - check for PRESENT status or checkIn time exists
-      // Count present employees - include those with PRESENT status, HALF_DAY, or checkIn time
-      // AND ensure they are regular employees
-      const presentToday = attendanceData.attendanceRecords?.filter((a: any) => {
-        if (!regularEmployeeIds.has(a.employeeId)) return false;
-
-        const status = a.status?.toUpperCase();
-        // Count as present if status is PRESENT or HALF_DAY, or if they have checked in (unless explicitly absent/on leave)
-        return status === "PRESENT" ||
-          status === "HALF_DAY" ||
-          (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE" && status !== "LEAVE");
-      }).length || 0;
-
-      const allLeaves = leaveData.leaveRequests || [];
-      // Filter leave requests for regular employees only
-      const pendingLeaves = allLeaves.filter((lr: any) =>
-        lr.status === "PENDING" && regularEmployeeIds.has(lr.employeeId)
-      ).length;
-
-      // Get recent leave requests (latest 10, sorted by most recent)
-      // Also filtered for regular employees
-      const recentLeaves = allLeaves
-        .filter((lr: any) => regularEmployeeIds.has(lr.employeeId))
-        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 10);
-
-      setStats({
-        totalEmployees,
-        presentToday,
-        pendingLeaves,
-        monthlyPayroll,
-      });
-
-      setRecentLeaveRequests(recentLeaves);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-      setLoading(false);
-    } finally {
-      setIsRefreshing(false);
-    }
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
   }, []);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+  const tomorrow = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }, [today]);
 
-  const handleRefresh = () => {
-    fetchDashboardData();
+  // 1. Fetch Employees
+  const { data: employeesData } = useQuery({
+    queryKey: ['employees', 'with-payroll'],
+    queryFn: async () => {
+      const res = await fetch("/api/employees?includePayroll=true");
+      return res.json();
+    },
+    // Use keepPreviousData to show stale data while refetching if needed (rare due to Infinity staleTime)
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  });
+
+  // 2. Fetch Attendance
+  const { data: attendanceData } = useQuery({
+    queryKey: ['attendance', 'dashboard', today.toISOString()],
+    queryFn: async () => {
+      const res = await fetch(`/api/attendance?startDate=${today.toISOString()}&endDate=${tomorrow.toISOString()}`);
+      return res.json();
+    },
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  });
+
+  // 3. Fetch Leave Requests
+  const { data: leaveData } = useQuery({
+    queryKey: ['leave-requests', 'all'],
+    queryFn: async () => {
+      const res = await fetch("/api/leave");
+      return res.json();
+    },
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  });
+
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Combine isFetching from all queries
+  const isGlobalFetching = useQueryClient().isFetching() > 0;
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    // Add a minimum delay of 800ms for better UX
+    const minDelay = new Promise(resolve => setTimeout(resolve, 800));
+
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ['employees', 'with-payroll'] }),
+      // Refetch all attendance queries (dashboard stats, yearly chart, etc.)
+      queryClient.refetchQueries({ queryKey: ['attendance'] }),
+      queryClient.refetchQueries({ queryKey: ['leave-requests', 'all'] }),
+      queryClient.invalidateQueries({ queryKey: ['attendance-stats'] }),
+      minDelay
+    ]);
+    setIsRefreshing(false);
   };
+
+  // Memoize all derived calculations
+  const stats = useMemo(() => {
+    const allEmployees = employeesData?.employees || [];
+    const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
+    const totalEmployees = regularEmployees.length;
+
+    const monthlyPayroll = regularEmployees.reduce((sum: number, emp: any) => {
+      return sum + (emp.payroll?.netSalary || 0);
+    }, 0);
+
+    const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
+
+    const presentTodayCalc = attendanceData?.attendanceRecords?.filter((a: any) => {
+      if (!regularEmployeeIds.has(a.employeeId)) return false;
+      const status = a.status?.toUpperCase();
+      return status === "PRESENT" ||
+        status === "HALF_DAY" ||
+        (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE" && status !== "LEAVE");
+    }).length || 0;
+
+    const allLeaves = leaveData?.leaveRequests || [];
+    const pendingLeaves = allLeaves.filter((lr: any) =>
+      lr.status === "PENDING" && regularEmployeeIds.has(lr.employeeId)
+    ).length;
+
+    // Combine with realtime stats if available
+    const displayPresentToday = attendanceStats.presentToday > 0 ? attendanceStats.presentToday : presentTodayCalc;
+
+    return {
+      totalEmployees,
+      presentToday: displayPresentToday,
+      pendingLeaves,
+      monthlyPayroll,
+    };
+  }, [employeesData, attendanceData, leaveData, attendanceStats]);
+
+
+  const recentLeaveRequestsList = useMemo(() => {
+    const allLeaves = leaveData?.leaveRequests || [];
+    const allEmployees = employeesData?.employees || [];
+    const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
+    const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
+
+    return allLeaves
+      .filter((lr: any) => regularEmployeeIds.has(lr.employeeId))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 10);
+  }, [leaveData, employeesData]);
 
   const formatCurrency = (amount: number) => {
     if (amount >= 10000000) {
@@ -173,7 +177,7 @@ export default function AdminPage() {
     }).format(amount);
   };
 
-  const attendanceRate = ((stats.presentToday / stats.totalEmployees) * 100).toFixed(1);
+  const attendanceRate = stats.totalEmployees > 0 ? ((stats.presentToday / stats.totalEmployees) * 100).toFixed(1) : "0.0";
 
   const statsCards = [
     {
@@ -214,18 +218,7 @@ export default function AdminPage() {
     },
   ];
 
-  // Listen to chart refresh events
-  useEffect(() => {
-    const handleChartRefresh = (event: CustomEvent) => {
-      // Trigger chart data refresh
-      fetchDashboardData();
-    };
-
-    window.addEventListener("chart:refresh", handleChartRefresh as EventListener);
-    return () => {
-      window.removeEventListener("chart:refresh", handleChartRefresh as EventListener);
-    };
-  }, [fetchDashboardData]);
+  // Manual chart refresh listener logic - removed to prevent extra effects, rely on handleRefresh
 
   return (
     <div className="space-y-6">
@@ -323,7 +316,7 @@ export default function AdminPage() {
                 <CardDescription>Monthly attendance and leave patterns</CardDescription>
               </CardHeader>
               <CardContent>
-                <AttendanceChart />
+                <MemoizedAttendanceChart />
               </CardContent>
             </Card>
             <Card className="col-span-3">
@@ -332,12 +325,10 @@ export default function AdminPage() {
                 <CardDescription>Real-time attendance breakdown</CardDescription>
               </CardHeader>
               <CardContent>
-                <AttendancePieChart />
+                <MemoizedAttendancePieChart />
               </CardContent>
             </Card>
           </div>
-
-
 
           {/* Bottom Section - Moved inside Overview Tab */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mt-4">
@@ -349,27 +340,24 @@ export default function AdminPage() {
                     <CardTitle>Recent Leave Requests</CardTitle>
                     <CardDescription>Latest employee leave applications</CardDescription>
                   </div>
-                  <Badge variant="secondary">{recentLeaveRequests.filter(r => r.status === "pending").length} Pending</Badge>
+                  <Badge variant="secondary">{recentLeaveRequestsList.filter((r: any) => r.status === "pending").length} Pending</Badge>
                 </div>
               </CardHeader>
               <CardContent>
-                {loading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : recentLeaveRequests.length === 0 ? (
+                {/* Removed Loading State Here for instant render of cached data or empty state */}
+                {recentLeaveRequestsList.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
                     <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No leave requests</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {recentLeaveRequests.map((request) => (
+                    {recentLeaveRequestsList.map((request: any) => (
                       <div key={request.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9">
                             <AvatarFallback className="text-xs">
-                              {request.employee.fullName.split(" ").map(n => n[0]).join("").toUpperCase()}
+                              {request.employee.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <div>
@@ -449,7 +437,7 @@ export default function AdminPage() {
               <CardDescription>Monthly payroll trends with bonuses</CardDescription>
             </CardHeader>
             <CardContent>
-              <PayrollChart />
+              <MemoizedPayrollChart />
             </CardContent>
           </Card>
         </TabsContent>
@@ -461,7 +449,7 @@ export default function AdminPage() {
               <CardDescription>Employee count by department</CardDescription>
             </CardHeader>
             <CardContent>
-              <DepartmentChart />
+              <MemoizedDepartmentChart />
             </CardContent>
           </Card>
         </TabsContent>
@@ -555,9 +543,6 @@ export default function AdminPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-
-
-    </div >
+    </div>
   );
 }

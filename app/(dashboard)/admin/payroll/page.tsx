@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { 
+import {
   IndianRupee,
   Search,
   RefreshCw,
@@ -34,8 +35,15 @@ import {
   AlertCircle,
   Banknote,
   FileText,
+  MoreVertical,
   Edit
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface PayrollData {
   id: string;
@@ -98,68 +106,52 @@ export default function AdminPayrollPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchPayrollData = async () => {
-    setIsRefreshing(true);
-    setLoading(true);
-    try {
-      // Get all employees
-      const employeesRes = await fetch("/api/employees");
-      const employeesData = await employeesRes.json();
-      const employees = employeesData.employees || [];
+  // Fetch payroll data using the optimized global query
+  // Fetch payroll data using the optimized global query
+  const { data: employeesData, isLoading: isLoadingPayroll, isRefetching, refetch } = useQuery({
+    queryKey: ['employees', 'with-payroll'],
+    queryFn: async () => {
+      const res = await fetch("/api/employees?includePayroll=true");
+      return res.json();
+    },
+    staleTime: Infinity,
+  });
 
-      // Fetch payroll for each employee
-      const payrollList = await Promise.all(
-        employees.map(async (emp: any) => {
-          let payrollInfo: {
-            basicSalary?: number;
-            baseSalary?: number;
-            hra: number;
-            allowances: number;
-            deductions: number;
-            netSalary: number;
-          } = {
-            basicSalary: 0,
-            hra: 0,
-            allowances: 0,
-            deductions: 0,
-            netSalary: 0,
-          };
+  useEffect(() => {
+    if (employeesData?.employees) {
+      const payrollList = employeesData.employees.map((emp: any) => {
+        const payrollInfo = emp.payroll || {
+          basicSalary: 0,
+          hra: 0,
+          allowances: 0,
+          deductions: 0,
+          netSalary: 0,
+        };
 
-          try {
-            const payrollRes = await fetch(`/api/payroll?employeeId=${emp.id}`);
-            const payrollData = await payrollRes.json();
-            if (payrollData.payroll) {
-              payrollInfo = payrollData.payroll;
-            }
-          } catch (error) {
-            console.error(`Error fetching payroll for ${emp.id}:`, error);
-          }
+        // Estimate bonus (can be updated later when bonus field is added)
+        const bonus = Math.round((payrollInfo.basicSalary || 0) * 0.1); // 10% of base
 
-          // Estimate bonus (can be updated later when bonus field is added)
-          const bonus = Math.round((payrollInfo.basicSalary || 0) * 0.1); // 10% of base
-
-          return {
-            id: emp.id,
-            name: emp.fullName,
-            email: emp.user?.email || "",
-            department: emp.department,
-            baseSalary: payrollInfo.basicSalary || 0,
-            bonus,
-            deductions: payrollInfo.deductions || 0,
-            netSalary: (payrollInfo.basicSalary || 0) + (payrollInfo.hra || 0) + (payrollInfo.allowances || 0) - (payrollInfo.deductions || 0),
-            status: "pending",
-            paidDate: null,
-          };
-        })
-      );
-
+        return {
+          id: emp.id,
+          name: emp.fullName,
+          email: emp.user?.email || "",
+          department: emp.department,
+          baseSalary: payrollInfo.basicSalary || 0,
+          bonus,
+          deductions: payrollInfo.deductions || 0,
+          netSalary: (payrollInfo.basicSalary || 0) + (payrollInfo.hra || 0) + (payrollInfo.allowances || 0) - (payrollInfo.deductions || 0),
+          status: "pending", // Default to pending for demo
+          paidDate: null,
+        };
+      });
       setPayrollData(payrollList);
-    } catch (error) {
-      console.error("Error fetching payroll data:", error);
-    } finally {
-      setIsRefreshing(false);
       setLoading(false);
     }
+  }, [employeesData]);
+
+  const fetchPayrollData = async () => {
+    // Wrapper to support manual refresh via refetch
+    await refetch();
   };
 
   // Calculate stats
@@ -176,14 +168,20 @@ export default function AdminPayrollPage() {
   // Filter data
   const filteredData = payrollData.filter(employee => {
     const matchesSearch = employee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         employee.email.toLowerCase().includes(searchQuery.toLowerCase());
+      employee.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDepartment = departmentFilter === "all" || employee.department === departmentFilter;
     const matchesStatus = statusFilter === "all" || employee.status === statusFilter;
     return matchesSearch && matchesDepartment && matchesStatus;
   });
 
-  const handleRefresh = () => {
-    fetchPayrollData();
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    const minDelay = new Promise(resolve => setTimeout(resolve, 800));
+    await Promise.all([
+      refetch(),
+      minDelay
+    ]);
+    setIsRefreshing(false);
   };
 
   const handleExportPayslips = () => {
@@ -248,15 +246,15 @@ export default function AdminPayrollPage() {
 
       if (res.ok) {
         // Update local state
-        setPayrollData(prev => prev.map(emp => 
-          emp.id === selectedEmployee.id 
+        setPayrollData(prev => prev.map(emp =>
+          emp.id === selectedEmployee.id
             ? {
-                ...emp,
-                baseSalary: editFormData.baseSalary,
-                bonus: editFormData.allowances,
-                deductions: editFormData.deductions,
-                netSalary: (editFormData.baseSalary + editFormData.hra + editFormData.allowances) - editFormData.deductions,
-              }
+              ...emp,
+              baseSalary: editFormData.baseSalary,
+              bonus: editFormData.allowances,
+              deductions: editFormData.deductions,
+              netSalary: (editFormData.baseSalary + editFormData.hra + editFormData.allowances) - editFormData.deductions,
+            }
             : emp
         ));
         setIsEditDialogOpen(false);
@@ -269,7 +267,7 @@ export default function AdminPayrollPage() {
   const handleProcessPayroll = () => {
     setIsProcessing(true);
     setTimeout(() => {
-      setPayrollData(prev => prev.map(e => 
+      setPayrollData(prev => prev.map(e =>
         e.status === "pending" ? { ...e, status: "paid" } : e
       ));
       setIsProcessing(false);
@@ -310,9 +308,9 @@ export default function AdminPayrollPage() {
             <div>
               <p className="text-sm text-muted-foreground mb-1">Total Budget Allocated</p>
               <p className="text-3xl font-bold text-blue-600">{formatCurrency(adminBudget)}</p>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setIsAdjustBudgetOpen(true)}
                 className="mt-2"
               >
@@ -345,13 +343,13 @@ export default function AdminPayrollPage() {
         </div>
         <div className="flex items-center gap-2">
           {mounted && currentTime && (
-            <Badge variant="outline" className="font-mono px-3 py-1">
+            <Badge variant="outline" className="hidden md:flex font-mono px-3 py-1">
               <Calendar className="h-4 w-4 mr-2" />
               {currentTime.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
             </Badge>
           )}
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full md:w-48">
               <SelectValue placeholder="Select month" />
             </SelectTrigger>
             <SelectContent>
@@ -360,10 +358,25 @@ export default function AdminPayrollPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+
+          <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing || isRefetching} className="hidden md:flex">
+            <RefreshCw className={`h-4 w-4 mr-2 ${(isRefreshing || isRefetching) ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="md:hidden">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleRefresh} disabled={isRefreshing || isRefetching}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh Date
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -426,20 +439,22 @@ export default function AdminPayrollPage() {
       {/* Actions Bar */}
       <Card>
         <CardContent className="py-4">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-lg px-4 py-2">
+              <Badge variant="outline" className="text-sm md:text-lg px-3 py-1 md:px-4 md:py-2">
                 <Calendar className="h-4 w-4 mr-2" />
                 {selectedMonth}
               </Badge>
             </div>
-            <div className="flex gap-2">
+
+            {/* Desktop Actions */}
+            <div className="hidden md:flex gap-2">
               <Button variant="outline" onClick={handleExportPayslips}>
                 <Download className="h-4 w-4 mr-2" />
                 Export Payslips
               </Button>
-              <Button 
-                onClick={handleProcessPayroll} 
+              <Button
+                onClick={handleProcessPayroll}
                 disabled={isProcessing || pendingCount === 0}
               >
                 {isProcessing ? (
@@ -454,6 +469,31 @@ export default function AdminPayrollPage() {
                   </>
                 )}
               </Button>
+            </div>
+
+            {/* Mobile Actions Menu */}
+            <div className="md:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={handleExportPayslips}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Export Payslips
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleProcessPayroll}
+                    disabled={isProcessing || pendingCount === 0}
+                    className="text-blue-600 focus:text-blue-600 focus:bg-blue-50"
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Process Pending ({pendingCount})
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardContent>
@@ -503,8 +543,8 @@ export default function AdminPayrollPage() {
 
           {/* Table */}
           <div className="rounded-lg border">
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="overflow-x-auto w-full max-w-[calc(100vw-3rem)] md:max-w-full">
+              <table className="w-full whitespace-nowrap">
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left p-4 font-medium">Employee</th>

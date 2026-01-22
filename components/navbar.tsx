@@ -33,10 +33,17 @@ import {
   Clock,
   DollarSign,
   AlertCircle,
+  Menu
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import dynamic from "next/dynamic";
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { SidebarContent } from "@/components/sidebar";
 
 // Dynamically import CommandMenu to prevent hydration mismatch
 const CommandMenu = dynamic(() => import("@/components/command-menu").then(mod => ({ default: mod.CommandMenu })), {
@@ -111,6 +118,7 @@ export default function Navbar() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const isAdmin = pathname?.startsWith("/admin");
   const userRole = (session?.user as any)?.role || "EMPLOYEE";
 
@@ -200,7 +208,21 @@ export default function Navbar() {
         <div className="flex h-16 items-center justify-between px-4 md:px-6">
           {/* Left Section - Logo & Branding */}
           <div className="flex items-center gap-4">
-            <Link href={isAdmin ? "/admin" : "/employee"} className="flex items-center gap-3">
+            {/* Mobile Menu */}
+            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  <Menu className="h-5 w-5" />
+                  <span className="sr-only">Toggle menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="p-0 w-72">
+                <SidebarContent onItemClick={() => setIsSheetOpen(false)} />
+              </SheetContent>
+            </Sheet>
+
+            {/* Logo - Hidden on mobile */}
+            <Link href={isAdmin ? "/admin" : "/employee"} className="hidden md:flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-linear-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/25">
                 <Sparkles className="h-5 w-5 text-white" />
               </div>
@@ -235,11 +257,11 @@ export default function Navbar() {
 
           {/* Right Section - Actions & Profile */}
           <div className="flex items-center gap-2">
-            {/* Mobile Search Button */}
+            {/* Mobile Search Button - Hidden per request */}
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-xl lg:hidden"
+              className="hidden h-9 w-9 rounded-xl lg:hidden"
               onClick={() => setCommandOpen(true)}
             >
               <Search className="h-4 w-4" />

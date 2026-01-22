@@ -13,17 +13,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  Clock, 
-  Users, 
-  UserCheck, 
-  UserX, 
+import {
+  Clock,
+  Users,
+  UserCheck,
+  UserX,
   Calendar,
   Search,
   RefreshCw,
   Download,
-  AlertCircle
+  AlertCircle,
+  MoreVertical
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface AttendanceData {
   id: string;
@@ -101,15 +108,15 @@ export default function AdminAttendancePage() {
       // Combine employee data with attendance records
       const combinedData = employees.map((emp: any) => {
         const record = attendanceMap.get(emp.id);
-        const checkIn = record?.checkIn ? new Date(record.checkIn).toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
+        const checkIn = record?.checkIn ? new Date(record.checkIn).toLocaleTimeString('en-US', {
+          hour: '2-digit',
           minute: '2-digit',
-          hour12: true 
+          hour12: true
         }) : null;
-        const checkOut = record?.checkOut ? new Date(record.checkOut).toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
+        const checkOut = record?.checkOut ? new Date(record.checkOut).toLocaleTimeString('en-US', {
+          hour: '2-digit',
           minute: '2-digit',
-          hour12: true 
+          hour12: true
         }) : null;
 
         let workHours = "-";
@@ -161,7 +168,7 @@ export default function AdminAttendancePage() {
   // Filter data
   const filteredData = attendanceData.filter(employee => {
     const matchesSearch = employee.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         employee.email.toLowerCase().includes(searchQuery.toLowerCase());
+      employee.email.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesDepartment = departmentFilter === "all" || employee.department === departmentFilter;
     const matchesStatus = statusFilter === "all" || employee.status === statusFilter;
     return matchesSearch && matchesDepartment && matchesStatus;
@@ -183,19 +190,44 @@ export default function AdminAttendancePage() {
         </div>
         <div className="flex items-center gap-2">
           {mounted && currentTime && (
-            <Badge variant="outline" className="font-mono text-lg px-4 py-2">
+            <Badge variant="outline" className="hidden md:flex font-mono text-lg px-4 py-2">
               <Clock className="h-4 w-4 mr-2 animate-pulse" />
               {currentTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
             </Badge>
           )}
-          <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+
+          {/* Desktop Actions */}
+          <div className="hidden md:flex items-center gap-2">
+            <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          </div>
+
+          {/* Mobile Actions Menu */}
+          <div className="md:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleRefresh} disabled={isRefreshing}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Data
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
@@ -296,8 +328,8 @@ export default function AdminAttendancePage() {
 
           {/* Table */}
           <div className="rounded-lg border">
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="overflow-x-auto w-full max-w-[calc(100vw-3rem)] md:max-w-full">
+              <table className="w-full whitespace-nowrap">
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left p-4 font-medium">Employee</th>

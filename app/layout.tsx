@@ -5,6 +5,7 @@ import "./animations.css";
 import NextAuthProvider from "@/components/session-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { RealtimeProvider } from "@/contexts/realtime-context";
+import QueryProvider from "@/components/providers/query-provider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -41,9 +42,11 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <NextAuthProvider>
-            <RealtimeProvider>
-              {children}
-            </RealtimeProvider>
+            <QueryProvider>
+              <RealtimeProvider>
+                {children}
+              </RealtimeProvider>
+            </QueryProvider>
           </NextAuthProvider>
         </ThemeProvider>
       </body>

@@ -17,11 +17,11 @@ export async function GET(request: NextRequest) {
 
     // Build where clause
     const where: Record<string, unknown> = {};
-    
+
     if (employeeId) {
       where.employeeId = employeeId;
     }
-    
+
     if (status && status !== "all") {
       where.status = status.toUpperCase();
     }
@@ -54,7 +54,11 @@ export async function GET(request: NextRequest) {
       cache.set(cacheKey, leaveRequests, 120000);
     }
 
-    return NextResponse.json({ leaveRequests });
+    return NextResponse.json({ leaveRequests }, {
+      headers: {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
+      },
+    });
   } catch (error) {
     console.error("Error fetching leave requests:", error);
     return NextResponse.json({ error: "Failed to fetch leave requests" }, { status: 500 });
@@ -80,18 +84,18 @@ export async function POST(request: NextRequest) {
     // Calculate number of days (inclusive of both start and end dates)
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
     // Normalize to start of day (midnight) to avoid timezone issues
     start.setHours(0, 0, 0, 0);
     end.setHours(0, 0, 0, 0);
-    
+
     // Calculate difference in days
     const timeDiff = end.getTime() - start.getTime();
     const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-    
+
     // Add 1 because both start and end dates are inclusive
     const days = daysDiff + 1;
-    
+
     // Validate that days is at least 1
     if (days < 1) {
       return NextResponse.json({ error: "End date must be on or after start date" }, { status: 400 });

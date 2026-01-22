@@ -113,7 +113,11 @@ export async function GET(request: NextRequest) {
       take: 100, // Limit results for better performance
     });
 
-    return NextResponse.json({ attendanceRecords });
+    return NextResponse.json({ attendanceRecords }, {
+      headers: {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
+      },
+    });
   } catch (error) {
     console.error("Error fetching attendance:", error);
     return NextResponse.json({ error: "Failed to fetch attendance records" }, { status: 500 });

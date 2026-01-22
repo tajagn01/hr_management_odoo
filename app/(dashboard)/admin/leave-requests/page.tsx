@@ -25,7 +25,14 @@ import {
   RefreshCw,
   Filter,
   CalendarDays,
+  MoreVertical
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface LeaveRequest {
   id: string;
@@ -154,10 +161,31 @@ export default function AdminLeaveRequestsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Leave Requests</h1>
           <p className="text-muted-foreground">Review and manage employee leave applications</p>
         </div>
-        <Button variant="outline" onClick={fetchLeaveRequests} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
+
+        {/* Desktop Actions */}
+        <div className="hidden md:flex">
+          <Button variant="outline" onClick={fetchLeaveRequests} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+
+        {/* Mobile Actions Menu */}
+        <div className="md:hidden self-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={fetchLeaveRequests} disabled={isLoading}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -212,9 +240,9 @@ export default function AdminLeaveRequestsPage() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2">
-        <Filter className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Filter:</span>
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 w-full">
+        <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="text-sm text-muted-foreground shrink-0">Filter:</span>
         <div className="flex gap-2">
           {["all", "pending", "approved", "rejected"].map((status) => (
             <Button
@@ -222,7 +250,7 @@ export default function AdminLeaveRequestsPage() {
               variant={filter === status ? "default" : "outline"}
               size="sm"
               onClick={() => setFilter(status)}
-              className="capitalize"
+              className="capitalize whitespace-nowrap"
             >
               {status}
             </Button>
@@ -252,13 +280,12 @@ export default function AdminLeaveRequestsPage() {
           ) : (
             <div className="space-y-4">
               {leaveRequests.map((request) => (
-                <div 
-                  key={request.id} 
-                  className={`p-4 border rounded-lg ${
-                    request.status.toLowerCase() === "pending" 
-                      ? "border-amber-200 bg-amber-50/50" 
+                <div
+                  key={request.id}
+                  className={`p-4 border rounded-lg ${request.status.toLowerCase() === "pending"
+                      ? "border-amber-200 bg-amber-50/50"
                       : ""
-                  }`}
+                    }`}
                 >
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     {/* Employee Info */}
@@ -306,19 +333,15 @@ export default function AdminLeaveRequestsPage() {
                       )}
 
                       {request.adminComment && (
-                        <div className={`mt-3 p-3 rounded-lg flex items-start gap-2 ${
-                          request.status.toLowerCase() === "approved" ? "bg-green-100 dark:bg-green-950" : "bg-red-100 dark:bg-red-950"
-                        }`}>
-                          <MessageSquare className={`h-4 w-4 mt-0.5 ${
-                            request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
-                          }`} />
+                        <div className={`mt-3 p-3 rounded-lg flex items-start gap-2 ${request.status.toLowerCase() === "approved" ? "bg-green-100 dark:bg-green-950" : "bg-red-100 dark:bg-red-950"
+                          }`}>
+                          <MessageSquare className={`h-4 w-4 mt-0.5 ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
+                            }`} />
                           <div>
-                            <p className={`text-xs font-medium ${
-                              request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
-                            }`}>Admin Comment</p>
-                            <p className={`text-sm ${
-                              request.status.toLowerCase() === "approved" ? "text-green-700" : "text-red-700"
-                            }`}>{request.adminComment}</p>
+                            <p className={`text-xs font-medium ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
+                              }`}>Admin Comment</p>
+                            <p className={`text-sm ${request.status.toLowerCase() === "approved" ? "text-green-700" : "text-red-700"
+                              }`}>{request.adminComment}</p>
                           </div>
                         </div>
                       )}
@@ -331,15 +354,15 @@ export default function AdminLeaveRequestsPage() {
                       </p>
                       {request.status.toLowerCase() === "pending" && (
                         <div className="flex gap-2 lg:flex-col">
-                          <Button 
+                          <Button
                             className="flex-1 bg-green-600 hover:bg-green-700"
                             onClick={() => handleAction(request, "approve")}
                           >
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                             Approve
                           </Button>
-                          <Button 
-                            variant="destructive" 
+                          <Button
+                            variant="destructive"
                             className="flex-1"
                             onClick={() => handleAction(request, "reject")}
                           >

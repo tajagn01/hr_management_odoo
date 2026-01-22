@@ -29,7 +29,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Employee not found" }, { status: 404 });
       }
 
-      return NextResponse.json({ employee: user.employee });
+      return NextResponse.json({ employee: user.employee }, {
+        headers: {
+          'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
+        },
+      });
     }
 
     // If id is provided, get specific employee
@@ -50,7 +54,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Employee not found" }, { status: 404 });
       }
 
-      return NextResponse.json({ employee });
+      return NextResponse.json({ employee }, {
+        headers: {
+          'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
+        },
+      });
     }
 
     // Get all employees with role-based filtering
@@ -143,7 +151,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized to view all employees" }, { status: 403 });
     }
 
-    return NextResponse.json({ employees, totalCount });
+    return NextResponse.json({ employees, totalCount }, {
+      headers: {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
+      },
+    });
   } catch (error) {
     console.error("Error fetching employees:", error);
     return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 });
