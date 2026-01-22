@@ -65,17 +65,17 @@ export default function Home() {
                     : "bg-transparent"
                     }`}
             >
-                <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 py-4">
-                    <div className="grid grid-cols-3 items-center gap-4">
+                <div className="container mx-auto px-4 sm:px-8 md:px-12 lg:px-16 py-3 sm:py-4">
+                    <div className="flex items-center justify-between gap-4">
                         {/* Left: Logo */}
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 sm:gap-3">
                             <div className="relative group cursor-pointer">
-                                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-all duration-300 group-hover:scale-105">
-                                    <Sparkles className="w-5 h-5 text-white" />
+                                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-all duration-300 group-hover:scale-105">
+                                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                                 </div>
                                 <div className="absolute -inset-1 bg-gradient-to-br from-blue-600 to-violet-600 rounded-lg blur opacity-30 group-hover:opacity-50 transition-opacity duration-300 -z-10"></div>
                             </div>
-                            <span className="text-xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
+                            <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
                                 DayFlow
                             </span>
                         </div>
@@ -89,7 +89,7 @@ export default function Home() {
                         </div>
 
                         {/* Right: Action Buttons */}
-                        <div className="flex items-center justify-end gap-3">
+                        <div className="flex items-center justify-end gap-2 sm:gap-3">
                             <ThemeToggle />
                             <Link href="/login" className="hidden sm:block">
                                 <Button variant="ghost" size="sm" className="font-medium">
@@ -109,11 +109,11 @@ export default function Home() {
                                         <Menu className="h-5 w-5" />
                                     </Button>
                                 </SheetTrigger>
-                                <SheetContent side="right" className="w-80">
+                                <SheetContent side="right" className="w-80 border-slate-200/50 dark:border-slate-800/50 bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl">
                                     <SheetHeader>
                                         <SheetTitle className="flex items-center gap-2">
-                                            <div className="w-9 h-9 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center">
-                                                <Sparkles className="w-5 h-5 text-white" />
+                                            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center">
+                                                <Sparkles className="w-4 h-4 text-white" />
                                             </div>
                                             DayFlow
                                         </SheetTitle>
@@ -121,33 +121,33 @@ export default function Home() {
                                     <div className="flex flex-col gap-4 mt-8">
                                         <a
                                             href="#features"
-                                            className="text-lg font-medium hover:text-primary transition"
+                                            className="text-lg font-medium hover:text-primary transition p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                                             onClick={() => setMobileMenuOpen(false)}
                                         >
                                             Features
                                         </a>
                                         <a
                                             href="#pricing"
-                                            className="text-lg font-medium hover:text-primary transition"
+                                            className="text-lg font-medium hover:text-primary transition p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                                             onClick={() => setMobileMenuOpen(false)}
                                         >
                                             Pricing
                                         </a>
                                         <a
                                             href="#faq"
-                                            className="text-lg font-medium hover:text-primary transition"
+                                            className="text-lg font-medium hover:text-primary transition p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                                             onClick={() => setMobileMenuOpen(false)}
                                         >
                                             FAQ
                                         </a>
-                                        <Separator className="my-2" />
-                                        <Link href="/login">
-                                            <Button variant="outline" className="w-full" size="lg">
+                                        <Separator className="my-2 bg-slate-200 dark:bg-slate-800" />
+                                        <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                                            <Button variant="outline" className="w-full h-11 text-base border-slate-200 dark:border-slate-800">
                                                 Sign In
                                             </Button>
                                         </Link>
-                                        <Link href="/register">
-                                            <Button className="w-full bg-blue-600 hover:bg-blue-700" size="lg">
+                                        <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
+                                            <Button className="w-full bg-blue-600 hover:bg-blue-700 h-11 text-base shadow-lg shadow-blue-500/20">
                                                 Get Started
                                             </Button>
                                         </Link>

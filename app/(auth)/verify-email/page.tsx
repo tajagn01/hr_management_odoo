@@ -42,7 +42,6 @@ function VerifyEmailForm() {
       if (res.ok) {
         setVerified(true);
         setSuccess(data.message || "Email verified successfully!");
-        // Redirect to login after 2 seconds
         setTimeout(() => {
           router.push("/login?verified=true");
         }, 2000);
@@ -89,8 +88,7 @@ function VerifyEmailForm() {
       newOtp[index] = numericValue;
       const updatedOtp = newOtp.join("").slice(0, 6);
       setOtp(updatedOtp);
-      
-      // Auto-focus next input
+
       if (index < 5 && numericValue) {
         const nextInput = document.getElementById(`otp-${index + 1}`);
         if (nextInput) {
@@ -98,7 +96,6 @@ function VerifyEmailForm() {
         }
       }
     } else if (value === "") {
-      // Handle backspace - clear current and move to previous
       const newOtp = otp.split("");
       newOtp[index] = "";
       setOtp(newOtp.join(""));
@@ -116,137 +113,130 @@ function VerifyEmailForm() {
   }
 
   return (
-    <div className="bg-card text-card-foreground p-8 rounded-2xl shadow-2xl border border-border">
-      {/* Logo & Header */}
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center h-14 w-14 rounded-xl bg-linear-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/25 mb-4">
-          <Mail className="h-7 w-7 text-white" />
-        </div>
-        <h1 className="text-2xl font-bold text-foreground">Verify Your Email</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Enter the 6-digit code sent to <br />
-          <span className="font-medium text-foreground">{email}</span>
-        </p>
-      </div>
+    <div className="w-full max-w-[400px] mx-auto py-4">
+      {/* Floating Auth Card */}
+      <div className="bg-slate-900/70 backdrop-blur-2xl border border-slate-700/30 rounded-[24px] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.5)] hover:shadow-[0_25px_70px_rgba(0,0,0,0.6)] transition-all duration-500">
 
-      {success && (
-        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 px-4 py-3 rounded-lg mb-6">
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span className="text-sm">{success}</span>
-        </div>
-      )}
-
-      {error && !verified && (
-        <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span className="text-sm">{error}</span>
-        </div>
-      )}
-
-      {!verified ? (
-        <form onSubmit={handleVerify} className="space-y-5">
-          <div>
-            <label htmlFor="otp" className="block text-sm font-medium text-foreground mb-2">
-              Verification Code
-            </label>
-            <div className="flex gap-2 justify-center">
-              {[0, 1, 2, 3, 4, 5].map((index) => (
-                <input
-                  key={index}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={otp[index] || ""}
-                  onChange={(e) => handleOtpChange(index, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Backspace" && !otp[index] && index > 0) {
-                      const prevInput = document.getElementById(`otp-${index - 1}`);
-                      if (prevInput) {
-                        (prevInput as HTMLInputElement).focus();
-                        handleOtpChange(index - 1, "");
-                      }
-                    }
-                  }}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-                    if (pastedData) {
-                      setOtp(pastedData);
-                      const nextEmptyIndex = Math.min(pastedData.length, 5);
-                      const nextInput = document.getElementById(`otp-${nextEmptyIndex}`);
-                      if (nextInput) {
-                        (nextInput as HTMLInputElement).focus();
-                      }
-                    }
-                  }}
-                  id={`otp-${index}`}
-                  className="w-12 h-12 text-center text-xl font-bold border-2 border-input bg-background rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                  autoComplete="off"
-                  suppressHydrationWarning
-                />
-              ))}
+        {/* Logo */}
+        <div className="flex items-center justify-center mb-5">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-violet-600 rounded-lg flex items-center justify-center shadow-lg">
+              <Mail className="w-4 h-4 text-white" />
             </div>
           </div>
-
-          <Button type="submit" className="w-full h-11 text-base font-medium" disabled={loading || otp.length !== 6}>
-            {loading ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Verifying...
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                Verify Email
-                <ArrowRight className="h-4 w-4" />
-              </span>
-            )}
-          </Button>
-        </form>
-      ) : (
-        <div className="text-center py-6">
-          <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
-          <p className="text-lg font-medium text-foreground mb-2">Email Verified!</p>
-          <p className="text-sm text-muted-foreground">Redirecting to login...</p>
         </div>
-      )}
 
-      {!verified && (
-        <>
-          <div className="mt-6 pt-6 border-t border-border">
-            <p className="text-center text-sm text-muted-foreground mb-3">
-              Didn't receive the code?
-            </p>
+        <div className="text-center mb-5">
+          <h1 className="text-xl font-bold text-white mb-1">Verify Email</h1>
+          <p className="text-slate-400 text-xs">
+            Enter code sent to <span className="text-white font-medium">{email}</span>
+          </p>
+        </div>
+
+        {success && (
+          <div className="mb-4 p-2 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-center gap-2">
+            <CheckCircle2 className="h-3 w-3 text-green-400" />
+            <p className="text-green-400 text-xs text-center">{success}</p>
+          </div>
+        )}
+
+        {error && !verified && (
+          <div className="mb-4 p-2 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-center gap-2">
+            <AlertCircle className="h-3 w-3 text-red-400" />
+            <p className="text-red-400 text-xs text-center">{error}</p>
+          </div>
+        )}
+
+        {!verified ? (
+          <form onSubmit={handleVerify} className="space-y-4">
+            <div>
+              <div className="flex gap-2 justify-center">
+                {[0, 1, 2, 3, 4, 5].map((index) => (
+                  <input
+                    key={index}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={otp[index] || ""}
+                    onChange={(e) => handleOtpChange(index, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Backspace" && !otp[index] && index > 0) {
+                        const prevInput = document.getElementById(`otp-${index - 1}`);
+                        if (prevInput) {
+                          (prevInput as HTMLInputElement).focus();
+                          handleOtpChange(index - 1, "");
+                        }
+                      }
+                    }}
+                    onPaste={(e) => {
+                      e.preventDefault();
+                      const pastedData = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+                      if (pastedData) {
+                        setOtp(pastedData);
+                        const nextEmptyIndex = Math.min(pastedData.length, 5);
+                        const nextInput = document.getElementById(`otp-${nextEmptyIndex}`);
+                        if (nextInput) {
+                          (nextInput as HTMLInputElement).focus();
+                        }
+                      }
+                    }}
+                    id={`otp-${index}`}
+                    className="w-10 h-10 text-center text-sm font-bold bg-slate-800/50 border border-slate-700/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all"
+                    autoComplete="off"
+                  />
+                ))}
+              </div>
+            </div>
+
             <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={handleResendOTP}
-              disabled={resending}
+              type="submit"
+              className="w-full h-10 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 text-white text-sm font-semibold rounded-lg shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+              disabled={loading || otp.length !== 6}
             >
-              {resending ? (
+              {loading ? (
                 <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Sending...
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Verifying...
                 </span>
               ) : (
-                <span className="flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4" />
-                  Resend OTP
-                </span>
+                "Verify Code"
               )}
             </Button>
+          </form>
+        ) : (
+          <div className="text-center py-4">
+            <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 className="h-6 w-6 text-green-400" />
+            </div>
+            <p className="text-sm font-medium text-white mb-1">Email Verified!</p>
+            <p className="text-xs text-slate-400">Redirecting to login...</p>
           </div>
+        )}
 
-          <div className="mt-6 pt-6 border-t border-border">
-            <p className="text-center text-sm text-muted-foreground">
-              Want to change email?{" "}
-              <Link href="/register" className="text-primary font-medium hover:underline">
-                Go back
+        {!verified && (
+          <div className="mt-4 pt-4 border-t border-slate-700/50">
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={handleResendOTP}
+                disabled={resending}
+                className="text-xs text-slate-400 hover:text-white transition-colors flex items-center justify-center gap-1.5"
+              >
+                {resending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3" />
+                )}
+                {resending ? "Sending..." : "Resend code"}
+              </button>
+
+              <Link href="/register" className="text-xs text-center text-violet-400 hover:text-violet-300 transition-colors">
+                Change email address
               </Link>
-            </p>
+            </div>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -254,12 +244,10 @@ function VerifyEmailForm() {
 export default function VerifyEmailPage() {
   return (
     <Suspense fallback={
-      <div className="bg-card text-card-foreground p-8 rounded-2xl shadow-2xl border border-border">
+      <div className="bg-slate-900/70 p-6 rounded-2xl border border-slate-700/30">
         <div className="text-center">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-xl bg-linear-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/25 mb-4">
-            <Mail className="h-7 w-7 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground">Loading...</h1>
+          <div className="inline-flex items-center justify-center h-10 w-10 rounded-lg bg-slate-800 mb-4 animate-pulse"></div>
+          <h1 className="text-xl font-bold text-white">Loading...</h1>
         </div>
       </div>
     }>

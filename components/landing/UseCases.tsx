@@ -134,7 +134,7 @@ export default function UseCases() {
     const activeCase = useCases.find(uc => uc.id === activeTab) || useCases[0];
 
     return (
-        <section className="relative py-20 sm:py-24 md:py-32 overflow-hidden">
+        <section className="relative py-20 sm:py-24 md:py-32 overflow-hidden hidden sm:block">
             {/* Gradient background */}
             <div className="absolute inset-0 bg-gradient-to-b from-white via-slate-50 to-white dark:from-slate-900 dark:via-slate-950 dark:to-slate-900" />
 
@@ -150,7 +150,7 @@ export default function UseCases() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-100px" }}
                     transition={{ duration: 0.6 }}
-                    className="text-center mb-12 sm:mb-16"
+                    className="text-center mb-8 sm:mb-16 hidden sm:block"
                 >
                     <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-slate-900 dark:text-white">
                         Built for teams of
@@ -163,42 +163,50 @@ export default function UseCases() {
                     </p>
                 </motion.div>
 
-                {/* Tab Navigation */}
+                {/* Tab Navigation - Scrollable on mobile */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-100px" }}
                     transition={{ duration: 0.5, delay: 0.2 }}
-                    className="flex flex-wrap justify-center gap-3 mb-12"
+                    className="flex overflow-x-auto pb-4 sm:pb-0 mb-8 sm:mb-12 no-scrollbar snap-x snap-mandatory px-4 sm:px-0"
+                    style={{
+                        maskImage: "linear-gradient(to right, transparent, black 5%, black 95%, transparent)",
+                        WebkitMaskImage: "linear-gradient(to right, transparent, black 5%, black 95%, transparent)"
+                    }}
                 >
-                    {useCases.map((useCase) => {
-                        const Icon = useCase.icon;
-                        return (
-                            <button
-                                key={useCase.id}
-                                onClick={() => setActiveTab(useCase.id)}
-                                className={`
-                                    group relative px-6 py-3 rounded-xl font-semibold transition-all duration-300
-                                    ${activeTab === useCase.id
-                                        ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg'
-                                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
-                                    }
-                                `}
-                            >
-                                <span className="flex items-center gap-2">
-                                    <Icon className="w-4 h-4" />
-                                    {useCase.title}
-                                </span>
-                                {activeTab === useCase.id && (
-                                    <motion.div
-                                        layoutId="activeTab"
-                                        className="absolute inset-0 bg-slate-900 dark:bg-white rounded-xl -z-10"
-                                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                                    />
-                                )}
-                            </button>
-                        );
-                    })}
+                    <div className="flex sm:flex-wrap justify-start sm:justify-center gap-2 sm:gap-3 mx-auto min-w-max sm:min-w-0">
+                        {useCases.map((useCase) => {
+                            const Icon = useCase.icon;
+                            return (
+                                <button
+                                    key={useCase.id}
+                                    onClick={() => setActiveTab(useCase.id)}
+                                    className={`
+                                        snap-center
+                                        group relative px-5 py-3 rounded-xl font-semibold transition-all duration-300
+                                        whitespace-nowrap flex-shrink-0
+                                        ${activeTab === useCase.id
+                                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg scale-105'
+                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                                        }
+                                    `}
+                                >
+                                    <span className="flex items-center gap-2 text-sm sm:text-base">
+                                        <Icon className="w-4 h-4" />
+                                        {useCase.title}
+                                    </span>
+                                    {activeTab === useCase.id && (
+                                        <motion.div
+                                            layoutId="activeTab"
+                                            className="absolute inset-0 bg-slate-900 dark:bg-white rounded-xl -z-10"
+                                            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                        />
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </motion.div>
 
                 {/* Content Area */}
@@ -209,19 +217,19 @@ export default function UseCases() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -20 }}
                         transition={{ duration: 0.3 }}
-                        className="max-w-5xl mx-auto"
+                        className="max-w-5xl mx-auto px-4 sm:px-0"
                     >
-                        <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-3xl p-8 sm:p-10 md:p-12 shadow-2xl">
+                        <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-10 md:p-12 shadow-2xl">
                             {/* Icon & Title */}
-                            <div className="flex items-start gap-6 mb-8">
-                                <div className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center shadow-lg">
+                            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 mb-8 text-center sm:text-left">
+                                <div className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center shadow-lg mx-auto sm:mx-0">
                                     <activeCase.icon className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-3">
+                                    <h3 className="text-2xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-3 leading-tight">
                                         {activeCase.tagline}
                                     </h3>
-                                    <p className="text-lg text-slate-600 dark:text-slate-400 leading-relaxed">
+                                    <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 leading-relaxed">
                                         {activeCase.description}
                                     </p>
                                 </div>

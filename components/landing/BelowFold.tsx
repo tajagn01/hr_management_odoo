@@ -195,7 +195,7 @@ export default function BelowFold() {
                         </p>
                     </motion.div>
 
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6 max-w-7xl mx-auto">
                         {features.map((feature, i) => (
                             <motion.div
                                 key={i}
@@ -210,24 +210,24 @@ export default function BelowFold() {
                                     {/* Hover gradient overlay */}
                                     <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-emerald-50/50 dark:from-blue-900/10 dark:via-transparent dark:to-emerald-900/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-                                    <CardHeader className="relative z-10">
-                                        <feature.icon className="w-12 h-12 text-slate-900 dark:text-white mb-4" />
+                                    <CardHeader className="relative z-10 p-4 sm:p-6">
+                                        <feature.icon className="w-8 h-8 sm:w-12 sm:h-12 text-slate-900 dark:text-white mb-3 sm:mb-4" />
 
-                                        <div className="mb-4">
-                                            <div className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-1">
+                                        <div className="mb-2 sm:mb-4">
+                                            <div className="text-xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 mb-0.5 sm:mb-1">
                                                 {feature.number}
                                             </div>
-                                            <div className="text-sm text-slate-500 dark:text-slate-400">
+                                            <div className="text-[10px] sm:text-sm text-slate-500 dark:text-slate-400 leading-tight">
                                                 {feature.label}
                                             </div>
                                         </div>
 
-                                        <CardTitle className="text-xl mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300">
+                                        <CardTitle className="text-sm sm:text-xl mb-1 sm:mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors duration-300">
                                             {feature.title}
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent className="relative z-10">
-                                        <CardDescription className="text-base leading-relaxed text-slate-600 dark:text-slate-400">
+                                    <CardContent className="relative z-10 p-4 sm:p-6 pt-0 sm:pt-0">
+                                        <CardDescription className="text-xs sm:text-base leading-snug sm:leading-relaxed text-slate-600 dark:text-slate-400">
                                             {feature.desc}
                                         </CardDescription>
                                     </CardContent>
@@ -480,11 +480,11 @@ export default function BelowFold() {
             </section>
 
             {/* Footer */}
-            <footer className="bg-slate-950 text-slate-400 py-16">
+            <footer className="bg-slate-950 text-slate-400 py-12 sm:py-16">
                 <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16">
-                    <div className="grid sm:grid-cols-2 md:grid-cols-5 gap-10 md:gap-12 mb-12">
-                        <div className="sm:col-span-2 md:col-span-2">
-                            <div className="flex items-center gap-3 mb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-8 md:gap-12 mb-12 text-left">
+                        <div className="col-span-2 md:col-span-2">
+                            <div className="flex items-center justify-start gap-3 mb-4">
                                 <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
                                     <Sparkles className="w-5 h-5 text-white" />
                                 </div>
@@ -495,7 +495,7 @@ export default function BelowFold() {
                             </p>
                         </div>
 
-                        <div>
+                        <div className="col-span-1">
                             <h4 className="text-white font-semibold mb-4 text-base">Product</h4>
                             <ul className="space-y-3">
                                 {["Features", "Pricing", "Integrations", "Changelog"].map((item) => (
@@ -506,7 +506,7 @@ export default function BelowFold() {
                             </ul>
                         </div>
 
-                        <div>
+                        <div className="col-span-1">
                             <h4 className="text-white font-semibold mb-4 text-base">Company</h4>
                             <ul className="space-y-3">
                                 {["About", "Blog", "Careers", "Contact"].map((item) => (
@@ -517,9 +517,9 @@ export default function BelowFold() {
                             </ul>
                         </div>
 
-                        <div>
+                        <div className="col-span-2 md:col-span-1">
                             <h4 className="text-white font-semibold mb-4 text-base">Legal</h4>
-                            <ul className="space-y-3">
+                            <ul className="space-y-3 md:space-y-3 grid grid-cols-2 md:block gap-3 md:gap-0">
                                 {["Privacy", "Terms", "Security", "Cookies"].map((item) => (
                                     <li key={item}>
                                         <a href="#" className="hover:text-white transition text-base">{item}</a>

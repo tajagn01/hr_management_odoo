@@ -118,7 +118,7 @@ export default function Hero() {
                 }}
             />
 
-            <div className="container mx-auto px-6 sm:px-8 md:px-12 lg:px-16 relative z-10">
+            <div className="container mx-auto px-4 sm:px-6 md:px-12 lg:px-16 relative z-10">
                 {/* Content */}
                 <div className="max-w-5xl mx-auto">
                     {/* Trust Pill */}
@@ -127,9 +127,9 @@ export default function Hero() {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5 }}
                         whileHover={{ scale: 1.05 }}
-                        className="flex justify-center mb-8"
+                        className="flex justify-center mb-6 sm:mb-8"
                     >
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+                        <div className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-white/60 dark:bg-slate-800/60 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
                             <motion.div
                                 className="w-1.5 h-1.5 rounded-full bg-emerald-500"
                                 animate={{
@@ -149,7 +149,7 @@ export default function Hero() {
                     </motion.div>
 
                     {/* Headline - Word by Word */}
-                    <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[4.5rem] font-[family-name:var(--font-outfit)] font-bold text-center mb-6 leading-[1.15] tracking-tight">
+                    <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[5rem] font-[family-name:var(--font-outfit)] font-bold text-center mb-6 leading-[1.1] tracking-tight">
                         {words.map((word, i) => (
                             <motion.span
                                 key={i}
@@ -160,7 +160,7 @@ export default function Hero() {
                                     delay: 0.6 + i * 0.08,
                                     ease: [0.21, 0.47, 0.32, 0.98]
                                 }}
-                                className="inline-block mr-3 text-slate-900 dark:text-white"
+                                className="inline-block mr-2 sm:mr-3 text-slate-900 dark:text-white"
                             >
                                 {word}
                                 {i === 2 && <br className="hidden sm:block" />}
@@ -173,13 +173,13 @@ export default function Hero() {
                         initial={{ opacity: 0, y: 15 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, delay: 1.2 }}
-                        className="text-center text-lg sm:text-xl lg:text-2xl text-slate-600 dark:text-slate-400 mb-10 max-w-2xl mx-auto font-medium"
+                        className="text-center text-lg sm:text-xl lg:text-2xl text-slate-600 dark:text-slate-400 mb-8 sm:mb-10 max-w-xl sm:max-w-2xl mx-auto font-medium px-4 sm:px-0"
                     >
                         Modern HR automation for fast-moving companies
                     </motion.p>
 
                     {/* CTAs */}
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12 sm:mb-16 w-full px-4 sm:px-0">
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -191,20 +191,18 @@ export default function Hero() {
                             <Link href="/register" className="block w-full sm:w-auto">
                                 <Button
                                     size="lg"
-                                    className="w-full sm:w-auto h-12 sm:h-11 px-6 text-base font-semibold bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 shadow-lg hover:shadow-xl transition-all duration-200"
+                                    className="w-full sm:w-auto h-12 sm:h-12 px-8 text-base sm:text-lg font-semibold bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 shadow-[0_10px_40px_-10px_rgba(59,130,246,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(59,130,246,0.6)] transition-all duration-200"
                                 >
                                     Start free trial
-                                    <ArrowRight className="w-4 h-4 ml-2" />
+                                    <ArrowRight className="w-5 h-5 ml-2" />
                                 </Button>
                             </Link>
                         </motion.div>
-
-
                     </div>
                 </div>
 
                 {/* Dashboard Preview Card */}
-                <div className="relative max-w-5xl mx-auto">
+                <div className="relative max-w-5xl mx-auto px-2 sm:px-0">
                     <motion.div
                         style={{ y }}
                         initial={{ opacity: 0, y: 60 }}
@@ -221,12 +219,12 @@ export default function Hero() {
                                 delay: 1.6
                             }
                         }}
-                        whileHover={{ scale: 1.02 }}
+                        whileHover={{ scale: 1.01 }}
                         className="w-full max-w-5xl mx-auto"
                     >
-                        <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-2xl rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all duration-300">
+                        <div className="bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-2xl rounded-2xl sm:rounded-3xl p-3 sm:p-4 md:p-8 shadow-2xl border border-slate-700/50 hover:border-slate-600/50 transition-all duration-300">
                             {/* Browser Chrome */}
-                            <div className="flex items-center gap-2 mb-6">
+                            <div className="flex items-center gap-2 mb-4 sm:mb-6 px-2 sm:px-0">
                                 <div className="flex gap-1.5">
                                     <div className="w-3 h-3 rounded-full bg-red-500"></div>
                                     <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
