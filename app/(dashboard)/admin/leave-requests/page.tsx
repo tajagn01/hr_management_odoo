@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Calendar,
   CheckCircle2,
@@ -279,102 +280,181 @@ export default function AdminLeaveRequestsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {leaveRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className={`p-4 border rounded-lg ${request.status.toLowerCase() === "pending"
-                      ? "border-amber-200 bg-amber-50/50"
-                      : ""
-                    }`}
-                >
-                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                    {/* Employee Info */}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <User className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-semibold">{request.employee.fullName}</p>
-                          <p className="text-sm text-muted-foreground">{request.employee.employeeCode}</p>
-                        </div>
-                        {getStatusBadge(request.status)}
-                      </div>
+              {/* Mobile Ticket View - Premium Redesign */}
+              <div className="md:hidden space-y-4">
+                {leaveRequests.map((request) => (
+                  <div key={`mobile-${request.id}`} className="bg-card rounded-xl border shadow-sm overflow-hidden relative">
+                    {/* Left colored accent based on status */}
+                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${request.status.toLowerCase() === 'approved' ? 'bg-green-500' :
+                      request.status.toLowerCase() === 'rejected' ? 'bg-red-500' : 'bg-amber-400'
+                      }`} />
 
-                      <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Building className="h-4 w-4 text-muted-foreground" />
-                          <span>{request.employee.department}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Briefcase className="h-4 w-4 text-muted-foreground" />
-                          <span>{request.employee.designation}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <span>
-                            {new Date(request.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            {request.startDate !== request.endDate && (
-                              <> - {new Date(request.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {getLeaveTypeBadge(request.type)}
-                          <span className="text-muted-foreground">({request.days} day{request.days > 1 ? "s" : ""})</span>
-                        </div>
-                      </div>
-
-                      {request.reason && (
-                        <div className="mt-3 p-3 bg-muted rounded-lg">
-                          <p className="text-xs font-medium text-muted-foreground mb-1">Reason</p>
-                          <p className="text-sm">{request.reason}</p>
-                        </div>
-                      )}
-
-                      {request.adminComment && (
-                        <div className={`mt-3 p-3 rounded-lg flex items-start gap-2 ${request.status.toLowerCase() === "approved" ? "bg-green-100 dark:bg-green-950" : "bg-red-100 dark:bg-red-950"
-                          }`}>
-                          <MessageSquare className={`h-4 w-4 mt-0.5 ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
-                            }`} />
-                          <div>
-                            <p className={`text-xs font-medium ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
-                              }`}>Admin Comment</p>
-                            <p className={`text-sm ${request.status.toLowerCase() === "approved" ? "text-green-700" : "text-red-700"
-                              }`}>{request.adminComment}</p>
+                    <div className="p-4 pl-5">
+                      {/* Header: Date & Status */}
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Start Date</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-2xl font-bold font-mono">{new Date(request.startDate).getDate()}</span>
+                            <span className="text-sm font-medium text-muted-foreground uppercase">{new Date(request.startDate).toLocaleDateString('en-US', { month: 'short' })}</span>
                           </div>
                         </div>
-                      )}
-                    </div>
+                        <div className="flex flex-col items-end">
+                          {getStatusBadge(request.status)}
+                          <span className="text-[10px] text-muted-foreground mt-1">
+                            {request.days} day{request.days > 1 ? 's' : ''} • {request.type}
+                          </span>
+                        </div>
+                      </div>
 
-                    {/* Actions */}
-                    <div className="flex flex-col gap-2 lg:min-w-40">
-                      <p className="text-xs text-muted-foreground text-right">
-                        Applied: {new Date(request.createdAt).toLocaleDateString()}
-                      </p>
+                      {/* Employee & Content */}
+                      <div className="bg-muted/30 rounded-lg p-3 mb-3">
+                        <div className="flex items-center gap-3 mb-2">
+                          <Avatar className="h-8 w-8 border border-background">
+                            <AvatarFallback className="bg-blue-100 text-blue-700 text-xs">{request.employee.fullName.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="text-sm font-semibold leading-none">{request.employee.fullName}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">{request.employee.designation}</p>
+                          </div>
+                        </div>
+
+                        {request.reason && (
+                          <div className="text-sm bg-background border rounded px-2 py-1.5 text-muted-foreground italic">
+                            "{request.reason}"
+                          </div>
+                        )}
+
+                        {request.adminComment && (
+                          <div className="mt-2 text-xs flex gap-1.5 text-blue-600">
+                            <MessageSquare className="h-3 w-3 shrink-0 mt-0.5" />
+                            <span>{request.adminComment}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions */}
                       {request.status.toLowerCase() === "pending" && (
-                        <div className="flex gap-2 lg:flex-col">
+                        <div className="grid grid-cols-2 gap-3 pt-1">
                           <Button
-                            className="flex-1 bg-green-600 hover:bg-green-700"
-                            onClick={() => handleAction(request, "approve")}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-2" />
-                            Approve
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            className="flex-1"
+                            variant="outline"
+                            className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
                             onClick={() => handleAction(request, "reject")}
                           >
-                            <XCircle className="h-4 w-4 mr-2" />
                             Reject
+                          </Button>
+                          <Button
+                            className="w-full bg-green-600 hover:bg-green-700 text-white shadow-sm shadow-green-200"
+                            onClick={() => handleAction(request, "approve")}
+                          >
+                            Approve
                           </Button>
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+
+              {/* Desktop View (Hidden on Mobile) */}
+              <div className="hidden md:block space-y-4">
+                {leaveRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className={`p-4 border rounded-lg ${request.status.toLowerCase() === "pending"
+                      ? "border-amber-200 bg-amber-50/50"
+                      : ""
+                      }`}
+                  >
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                      {/* Employee Info */}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                            <User className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="font-semibold">{request.employee.fullName}</p>
+                            <p className="text-sm text-muted-foreground">{request.employee.employeeCode}</p>
+                          </div>
+                          {getStatusBadge(request.status)}
+                        </div>
+
+                        <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Building className="h-4 w-4 text-muted-foreground" />
+                            <span>{request.employee.department}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Briefcase className="h-4 w-4 text-muted-foreground" />
+                            <span>{request.employee.designation}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-muted-foreground" />
+                            <span>
+                              {new Date(request.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {request.startDate !== request.endDate && (
+                                <> - {new Date(request.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getLeaveTypeBadge(request.type)}
+                            <span className="text-muted-foreground">({request.days} day{request.days > 1 ? "s" : ""})</span>
+                          </div>
+                        </div>
+
+                        {request.reason && (
+                          <div className="mt-3 p-3 bg-muted rounded-lg">
+                            <p className="text-xs font-medium text-muted-foreground mb-1">Reason</p>
+                            <p className="text-sm">{request.reason}</p>
+                          </div>
+                        )}
+
+                        {request.adminComment && (
+                          <div className={`mt-3 p-3 rounded-lg flex items-start gap-2 ${request.status.toLowerCase() === "approved" ? "bg-green-100 dark:bg-green-950" : "bg-red-100 dark:bg-red-950"
+                            }`}>
+                            <MessageSquare className={`h-4 w-4 mt-0.5 ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
+                              }`} />
+                            <div>
+                              <p className={`text-xs font-medium ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
+                                }`}>Admin Comment</p>
+                              <p className={`text-sm ${request.status.toLowerCase() === "approved" ? "text-green-700" : "text-red-700"
+                                }`}>{request.adminComment}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex flex-col gap-2 lg:min-w-40">
+                        <p className="text-xs text-muted-foreground text-right">
+                          Applied: {new Date(request.createdAt).toLocaleDateString()}
+                        </p>
+                        {request.status.toLowerCase() === "pending" && (
+                          <div className="flex gap-2 lg:flex-col">
+                            <Button
+                              className="flex-1 bg-green-600 hover:bg-green-700"
+                              onClick={() => handleAction(request, "approve")}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-2" />
+                              Approve
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              className="flex-1"
+                              onClick={() => handleAction(request, "reject")}
+                            >
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>

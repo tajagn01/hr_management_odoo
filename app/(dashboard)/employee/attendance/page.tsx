@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AttendanceCalendar } from "@/components/dashboard/attendance-calendar";
 import {
   Clock,
   LogIn,
@@ -440,8 +441,8 @@ export default function EmployeeAttendancePage() {
                   <div
                     key={index}
                     className={`flex items-center justify-between p-4 rounded-lg ${record.status === "weekend" || record.status === "holiday"
-                        ? "bg-muted/30"
-                        : "bg-muted/50"
+                      ? "bg-muted/30"
+                      : "bg-muted/50"
                       }`}
                   >
                     <div className="flex items-center gap-4">
@@ -472,47 +473,10 @@ export default function EmployeeAttendancePage() {
         </TabsContent>
 
         <TabsContent value="monthly">
-          <Card>
-            <CardHeader>
-              <CardTitle>Monthly Summary - January 2026</CardTitle>
-              <CardDescription>Your attendance overview for this month</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="text-center p-6 bg-green-50 rounded-xl">
-                  <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                  <p className="text-3xl font-bold text-green-600">22</p>
-                  <p className="text-sm text-green-600">Present Days</p>
-                </div>
-                <div className="text-center p-6 bg-red-50 rounded-xl">
-                  <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                  <p className="text-3xl font-bold text-red-600">1</p>
-                  <p className="text-sm text-red-600">Absent Days</p>
-                </div>
-                <div className="text-center p-6 bg-amber-50 rounded-xl">
-                  <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
-                  <p className="text-3xl font-bold text-amber-600">1</p>
-                  <p className="text-sm text-amber-600">Half Days</p>
-                </div>
-                <div className="text-center p-6 bg-blue-50 rounded-xl">
-                  <Calendar className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-                  <p className="text-3xl font-bold text-blue-600">2</p>
-                  <p className="text-sm text-blue-600">Leave Days</p>
-                </div>
-              </div>
-
-              <div className="mt-6 p-4 bg-muted rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Total Work Hours</span>
-                  <span className="text-2xl font-bold">176h 30m</span>
-                </div>
-                <div className="flex justify-between items-center mt-2 text-sm text-muted-foreground">
-                  <span>Expected Hours</span>
-                  <span>184h 00m</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <AttendanceCalendar attendanceData={monthlyAttendance.map(record => ({
+            date: record.date,
+            status: record.status.toUpperCase().replace('-', '_')
+          }))} />
         </TabsContent>
       </Tabs>
 

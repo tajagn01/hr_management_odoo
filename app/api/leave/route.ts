@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { cache } from "@/lib/utils";
+import { revalidateTag } from "next/cache";
+import { getLeavesCached, TAGS } from "@/lib/data";
 
 // GET leave requests
 export async function GET(request: NextRequest) {
@@ -15,50 +17,25 @@ export async function GET(request: NextRequest) {
     const employeeId = searchParams.get("employeeId");
     const status = searchParams.get("status");
 
-    // Build where clause
-    const where: Record<string, unknown> = {};
+    const userRole = session.user.role;
+    const userEmployeeId = session.user.employeeId;
+
+    let queryParams: any = { status };
 
     if (employeeId) {
-      where.employeeId = employeeId;
+      if (userRole === "EMPLOYEE" && employeeId !== userEmployeeId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
+      queryParams.employeeId = employeeId;
+    } else {
+      if (userRole === "EMPLOYEE") {
+        queryParams.employeeId = userEmployeeId;
+      }
     }
 
-    if (status && status !== "all") {
-      where.status = status.toUpperCase();
-    }
+    const leaveRequests = await getLeavesCached(queryParams);
 
-    // Build cache key based on query parameters
-    const cacheKey = `leave_requests_${employeeId || 'all'}_${status || 'all'}_${session.user.email}`;
-    let leaveRequests = cache.get(cacheKey);
-
-    if (!leaveRequests) {
-      leaveRequests = await prisma.leaveRequest.findMany({
-        where,
-        include: {
-          employee: {
-            select: {
-              id: true,
-              fullName: true,
-              employeeCode: true,
-              department: true,
-              designation: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 50, // Limit results to improve performance
-      });
-
-      // Cache for 2 minutes
-      cache.set(cacheKey, leaveRequests, 120000);
-    }
-
-    return NextResponse.json({ leaveRequests }, {
-      headers: {
-        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600',
-      },
-    });
+    return NextResponse.json({ leaveRequests });
   } catch (error) {
     console.error("Error fetching leave requests:", error);
     return NextResponse.json({ error: "Failed to fetch leave requests" }, { status: 500 });
@@ -122,10 +99,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Clear cache for leave requests
-    cache.delete(`leave_requests_${employeeId}_all_${session.user.email}`);
-    cache.delete(`leave_requests_all_all_${session.user.email}`);
-    cache.delete(`leave_requests_all_PENDING_${session.user.email}`);
+    // Invalidate cache
+    revalidateTag(TAGS.leaves, "max");
 
     return NextResponse.json(
       { message: "Leave request submitted successfully", leaveRequest },
@@ -185,11 +160,8 @@ export async function PUT(request: NextRequest) {
       },
     });
 
-    // Clear cache for leave requests
-    cache.delete(`leave_requests_${leaveRequest.employeeId}_all_${session.user.email}`);
-    cache.delete(`leave_requests_all_all_${session.user.email}`);
-    cache.delete(`leave_requests_all_${leaveRequest.status}_${session.user.email}`);
-    cache.delete(`leave_requests_all_PENDING_${session.user.email}`);
+    // Invalidate cache
+    revalidateTag(TAGS.leaves, "max");
 
     return NextResponse.json({
       message: `Leave request ${status.toLowerCase()} successfully`,

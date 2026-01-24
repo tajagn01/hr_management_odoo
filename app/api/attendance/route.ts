@@ -23,10 +23,12 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("endDate");
 
     // Get current user to check permissions
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email! },
-      include: { employee: true },
-    });
+    // Optimized: Use session data directly
+    const user = {
+      role: session.user.role,
+      email: session.user.email,
+      employee: session.user.employeeId ? { id: session.user.employeeId } : null
+    };
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -35,49 +37,45 @@ export async function GET(request: NextRequest) {
     // Build where clause based on role
     const where: Record<string, unknown> = {};
 
-    // Role-based access control
+    // Role-based access control optimization
     if (employeeId) {
       if (user.role === "ADMIN") {
-        // Admins can view any employee's attendance
         where.employeeId = employeeId;
       } else if (user.role === "MANAGER" && user.employee) {
-        // Managers can view their team's attendance
-        // @ts-ignore
-        const teamEmployeeIds = await prisma.employee.findMany({
-          where: { managerId: user.employee.id },
-          select: { id: true },
+        // Optimized: Check manager relation directly in the where clause of the attendance query if possible
+        // But for security, we must verify the relationship first.
+        // We can optimize by counting if there is a match instead of fetching all IDs
+        const isTeamMember = await prisma.employee.count({
+          where: {
+            id: employeeId,
+            managerId: user.employee.id
+          }
         });
-        const teamIds = teamEmployeeIds.map(e => e.id);
 
-        // Check if requested employee is in manager's team or is the manager themselves
-        if (!teamIds.includes(employeeId) && employeeId !== user.employee.id) {
+        if (isTeamMember === 0 && employeeId !== user.employee.id) {
           return NextResponse.json({ error: "Unauthorized to view this attendance" }, { status: 403 });
         }
         where.employeeId = employeeId;
       } else if (user.role === "EMPLOYEE" && user.employee?.id === employeeId) {
-        // Employees can view their own attendance
         where.employeeId = employeeId;
       } else {
         return NextResponse.json({ error: "Unauthorized to view this attendance" }, { status: 403 });
       }
     } else {
-      // No employeeId provided
+      // Filter logic for NO employeeId provided (My Attendance / Team Attendance)
       if (user.role === "ADMIN") {
-        // Admins can see all attendance records
+        // All records
       } else if (user.role === "MANAGER" && user.employee) {
-        // Managers see their team's attendance
-        // @ts-ignore
-        const teamEmployeeIds = await prisma.employee.findMany({
+        // Fetch team IDs optimized
+        const teamMembers = await prisma.employee.findMany({
           where: { managerId: user.employee.id },
-          select: { id: true },
+          select: { id: true }
         });
-        const teamIds = [...teamEmployeeIds.map(e => e.id), user.employee.id];
+        const teamIds = teamMembers.map(e => e.id);
+        teamIds.push(user.employee.id); // Add self
         where.employeeId = { in: teamIds };
       } else if (user.employee) {
-        // Employees see their own attendance
         where.employeeId = user.employee.id;
-      } else {
-        return NextResponse.json({ error: "Employee profile not found" }, { status: 404 });
       }
     }
 
@@ -94,24 +92,47 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const attendanceRecords = await prisma.attendance.findMany({
-      where,
-      include: {
-        employee: {
-          select: {
-            id: true,
-            fullName: true,
-            employeeCode: true,
-            department: true,
-            designation: true,
+    // Optimized Fetch: Avoid joining Employee multiple times if we already know the employeeId
+    let attendanceRecords;
+    if (where.employeeId && typeof where.employeeId === 'string') {
+      // Single employee fetch - split query optimization
+      const [empDetails, records] = await Promise.all([
+        prisma.employee.findUnique({
+          where: { id: where.employeeId as string },
+          select: { id: true, fullName: true, employeeCode: true, department: true, designation: true }
+        }),
+        prisma.attendance.findMany({
+          where,
+          orderBy: { date: "desc" },
+          take: 100
+        })
+      ]);
+
+      attendanceRecords = records.map(r => ({
+        ...r,
+        employee: empDetails || { id: "unknown" }
+      }));
+    } else {
+      // Multiple employees - keep the join but limit fields
+      attendanceRecords = await prisma.attendance.findMany({
+        where,
+        include: {
+          employee: {
+            select: {
+              id: true,
+              fullName: true,
+              employeeCode: true,
+              department: true,
+              designation: true,
+            },
           },
         },
-      },
-      orderBy: {
-        date: "desc",
-      },
-      take: 100, // Limit results for better performance
-    });
+        orderBy: {
+          date: "desc",
+        },
+        take: 100, // Limit results
+      });
+    }
 
     return NextResponse.json({ attendanceRecords }, {
       headers: {
@@ -288,6 +309,7 @@ export async function POST(request: NextRequest) {
         timestamp: now.toISOString(),
       });
 
+      // ...
       // Trigger monthly attendance aggregation update
       try {
         await updateMonthlyAttendance(employeeId, now);
@@ -299,6 +321,8 @@ export async function POST(request: NextRequest) {
     } else {
       return NextResponse.json({ error: "Invalid type. Must be 'checkIn' or 'checkOut'" }, { status: 400 });
     }
+
+    revalidateTag(TAGS.attendance); // Invalidate cache
 
     return NextResponse.json({
       message: `${type === "checkIn" ? "Checked in" : "Checked out"} successfully`,

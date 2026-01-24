@@ -74,7 +74,9 @@ model Employee {
   designation     String
   department      String
   joiningDate     DateTime
+  dateOfBirth     DateTime?  // New: Employee date of birth
   profileImage    String?
+  profileCompleted Boolean   @default(false) // New: Track if profile setup is complete
   managerId       String?    // Manager relationship (nullable for top-level employees)
 
   user            User       @relation(fields: [userId], references: [id])
@@ -93,6 +95,7 @@ model Employee {
   @@index([department])
   @@index([designation])
   @@index([managerId])
+  @@index([fullName]) // Common sort field
 }
 
 //////////////////////////////////////////////////
@@ -114,6 +117,8 @@ model Attendance {
 
   @@unique([employeeId, date])
   @@index([employeeId])
+  @@index([employeeId, date]) // existing
+  @@index([date, employeeId]) // Optimized for reverse chronological queries
   @@index([date])
   @@index([status])
 }
@@ -142,6 +147,10 @@ model LeaveRequest {
   updatedAt     DateTime    @updatedAt
 
   @@index([employeeId])
+  @@index([employeeId, createdAt])
+  @@index([employeeId, startDate])
+  @@index([employeeId, endDate])   // Optimized for range overlap checks
+  @@index([status, startDate])     // Optimized for admin dashboard
   @@index([status])
   @@index([createdAt])
 }

@@ -9,15 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useRealtime } from "@/contexts/realtime-context";
 import { NotificationToast } from "@/components/notifications/toast";
+import { AttendanceCalendar } from "@/components/dashboard/attendance-calendar";
 import {
   CalendarCheck,
   CalendarPlus,
   User,
   Clock,
   CheckCircle2,
-  XCircle,
   AlertCircle,
-  TrendingUp,
   Calendar,
   Bell,
   Loader2
@@ -55,7 +54,7 @@ interface AttendanceStats {
 
 export default function EmployeePage() {
   const { data: session } = useSession();
-  const { isConnected, connectionFailed, socket } = useRealtime();
+  const { isConnected, connectionFailed } = useRealtime();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -74,6 +73,7 @@ export default function EmployeePage() {
     halfDay: 0,
     leave: 0,
   });
+  const [monthlyAttendance, setMonthlyAttendance] = useState<any[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -82,137 +82,123 @@ export default function EmployeePage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch employee data
-  const fetchEmployeeData = useCallback(async () => {
-    if (!session?.user?.email) return;
+  // Helper to check if late
+  const isLateCheckIn = (checkInTimeStr: string | null) => {
+    if (!checkInTimeStr) return false;
+    // We need the Date object, but checkInTimeStr here is formatted string (10:00 AM).
+    // Better to check original data in fetchDashboardData
+    return false; // Handled in state
+  };
+
+  const fetchDashboardData = useCallback(async () => {
+    if (!session?.user?.employeeId) return;
 
     try {
-      const res = await fetch(`/api/employees?email=${session.user.email}`);
+      setLoading(true);
+      const res = await fetch(`/api/employees/${session.user.employeeId}/overview`);
+      if (!res.ok) throw new Error("Failed to fetch dashboard data");
+
       const data = await res.json();
-      if (data.employee) {
-        setEmployeeData(data.employee);
-        return data.employee.id;
+
+      // 1. Employee Profile
+      if (data.profile) {
+        setEmployeeData(data.profile);
       }
-    } catch (error) {
-      console.error("Error fetching employee:", error);
-    }
-    return null;
-  }, [session?.user?.email]);
 
-  // Fetch today's attendance
-  const fetchTodayAttendance = useCallback(async (employeeId: string) => {
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      // 2. Today's Attendance & Late Logic
+      const todayDate = new Date().toISOString().split('T')[0];
+      const todayRecord = data.attendance?.find((a: any) => a.date.startsWith(todayDate));
 
-      const res = await fetch(
-        `/api/attendance?employeeId=${employeeId}&startDate=${today.toISOString()}&endDate=${tomorrow.toISOString()}`
-      );
-      const data = await res.json();
+      if (todayRecord) {
+        let status = todayRecord.status?.toLowerCase() || "not-marked";
+        let isLate = false;
 
-      if (data.attendanceRecords && data.attendanceRecords.length > 0) {
-        const todayRecord = data.attendanceRecords[0];
+        if (todayRecord.checkIn) {
+          const checkInTime = new Date(todayRecord.checkIn);
+          const thresholdTime = new Date(checkInTime);
+          thresholdTime.setHours(9, 30, 0, 0);
+          if (checkInTime > thresholdTime) {
+            isLate = true;
+            status = "late"; // Internal status for badge
+          }
+        }
+
         setTodayAttendance({
-          status: todayRecord.status?.toLowerCase() || "not-marked",
+          status: status,
           checkIn: todayRecord.checkIn ? new Date(todayRecord.checkIn).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
+            hour: '2-digit', minute: '2-digit', hour12: true
           }) : null,
           checkOut: todayRecord.checkOut ? new Date(todayRecord.checkOut).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
+            hour: '2-digit', minute: '2-digit', hour12: true
           }) : null,
         });
       } else {
-        setTodayAttendance({
-          status: "not-marked",
-          checkIn: null,
-          checkOut: null,
+        setTodayAttendance({ status: "absent", checkIn: null, checkOut: null }); // Default to absent if no record/leave
+        // Check if On Leave (Override)
+        const onLeave = data.leaves?.find((l: any) => {
+          if (l.status !== "APPROVED") return false;
+          const start = new Date(l.startDate);
+          const end = new Date(l.endDate);
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
+        });
+
+        if (onLeave) {
+          setTodayAttendance({ status: "leave", checkIn: null, checkOut: null });
+        } else if (!todayRecord) {
+          // If literally no record and no leave, it's Absent (unless it's future/weekend - minimal logic: assume absent for today if active day)
+          setTodayAttendance({ status: "absent", checkIn: null, checkOut: null });
+        }
+      }
+
+      // 3. Leave Stats (Remove hardcoded remaining)
+      if (data.leaves) {
+        const approvedCount = data.leaves.filter((l: any) => l.status === "APPROVED").length;
+        setLeaveStats((prev) => ({
+          ...prev,
+          pending: data.leaves.filter((l: any) => l.status === "PENDING").length,
+          approved: approvedCount,
+          rejected: data.leaves.filter((l: any) => l.status === "REJECTED").length,
+          remaining: 0, // Schema doesn't support balance yet
+          total: approvedCount, // Show Usage instead
+        }));
+      }
+
+      // 4. Attendance Stats
+      if (data.summary?.attendance) {
+        setAttendanceStats({
+          present: data.summary.attendance.present,
+          absent: data.summary.attendance.absent,
+          halfDay: data.summary.attendance.halfDay,
+          leave: 0 // Not in summary yet
         });
       }
-    } catch (error) {
-      console.error("Error fetching today's attendance:", error);
-    }
-  }, []);
 
-  // Fetch leave stats
-  const fetchLeaveStats = useCallback(async (employeeId: string) => {
-    try {
-      const res = await fetch(`/api/leave?employeeId=${employeeId}`);
-      const data = await res.json();
-
-      if (data.leaveRequests) {
-        const pending = data.leaveRequests.filter((lr: any) => lr.status === "PENDING").length;
-        const approved = data.leaveRequests.filter((lr: any) => lr.status === "APPROVED").length;
-        const rejected = data.leaveRequests.filter((lr: any) => lr.status === "REJECTED").length;
-        const totalDays = data.leaveRequests
-          .filter((lr: any) => lr.status === "APPROVED")
-          .reduce((sum: number, lr: any) => sum + (lr.days || 0), 0);
-
-        setLeaveStats({
-          pending,
-          approved,
-          rejected,
-          remaining: 20 - totalDays,
-          total: 20,
-        });
+      // 5. Calendar Data
+      if (data.attendance) {
+        setMonthlyAttendance(data.attendance);
       }
+
     } catch (error) {
-      console.error("Error fetching leave stats:", error);
-    }
-  }, []);
-
-  // Fetch monthly attendance stats
-  const fetchMonthlyAttendance = useCallback(async (employeeId: string) => {
-    try {
-      const today = new Date();
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
-      const res = await fetch(
-        `/api/attendance?employeeId=${employeeId}&startDate=${firstDayOfMonth.toISOString()}&endDate=${lastDayOfMonth.toISOString()}`
-      );
-      const data = await res.json();
-
-      if (data.attendanceRecords) {
-        const stats: AttendanceStats = {
-          present: data.attendanceRecords.filter((a: any) => a.status === "PRESENT").length,
-          absent: data.attendanceRecords.filter((a: any) => a.status === "ABSENT").length,
-          halfDay: data.attendanceRecords.filter((a: any) => a.status === "HALF_DAY").length,
-          leave: data.attendanceRecords.filter((a: any) => a.status === "LEAVE").length,
-        };
-        setAttendanceStats(stats);
-      }
-    } catch (error) {
-      console.error("Error fetching monthly attendance:", error);
-    }
-  }, []);
-
-  // Load all data
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      const employeeId = await fetchEmployeeData();
-      if (employeeId) {
-        await Promise.all([
-          fetchTodayAttendance(employeeId),
-          fetchLeaveStats(employeeId),
-          fetchMonthlyAttendance(employeeId),
-        ]);
-      }
+      console.error("Error fetching dashboard:", error);
+    } finally {
       setLoading(false);
-    };
-    loadData();
-  }, [fetchEmployeeData, fetchTodayAttendance, fetchLeaveStats, fetchMonthlyAttendance]);
+    }
+  }, [session?.user?.employeeId]);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchDashboardData();
+    }
+  }, [fetchDashboardData, session?.user?.id]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "present":
         return <Badge className="bg-green-500">Present</Badge>;
+      case "late":
+        return <Badge className="bg-amber-500">Present (Late)</Badge>;
       case "absent":
         return <Badge variant="destructive">Absent</Badge>;
       case "half-day":
@@ -239,10 +225,10 @@ export default function EmployeePage() {
       {mounted && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <div className={`h-2 w-2 rounded-full ${isConnected
-              ? "bg-green-500 animate-pulse"
-              : connectionFailed
-                ? "bg-gray-400"
-                : "bg-yellow-500 animate-pulse"
+            ? "bg-green-500 animate-pulse"
+            : connectionFailed
+              ? "bg-gray-400"
+              : "bg-yellow-500 animate-pulse"
             }`} />
           <span>
             {isConnected
@@ -311,12 +297,12 @@ export default function EmployeePage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Leaves Remaining</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Leaves Used</CardTitle>
             <Calendar className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{leaveStats.remaining}</div>
-            <p className="text-xs text-muted-foreground">Out of {leaveStats.total} days</p>
+            <div className="text-3xl font-bold">{leaveStats.total}</div>
+            <p className="text-xs text-muted-foreground">Approved this year</p>
           </CardContent>
         </Card>
 
@@ -332,7 +318,6 @@ export default function EmployeePage() {
         </Card>
       </div>
 
-      {/* Quick Actions & Notifications */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Quick Actions */}
         <Card>
@@ -407,33 +392,41 @@ export default function EmployeePage() {
         </Card>
       </div>
 
-      {/* Attendance Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle>This Month&apos;s Attendance</CardTitle>
-          <CardDescription>Your attendance summary for January 2026</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center p-4 bg-green-50 dark:bg-green-950/30 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">{attendanceStats.present}</div>
-              <p className="text-sm text-green-600">Present</p>
-            </div>
-            <div className="text-center p-4 bg-red-50 dark:bg-red-950/30 rounded-lg">
-              <div className="text-2xl font-bold text-red-600">{attendanceStats.absent}</div>
-              <p className="text-sm text-red-600">Absent</p>
-            </div>
-            <div className="text-center p-4 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
-              <div className="text-2xl font-bold text-amber-600">{attendanceStats.halfDay}</div>
-              <p className="text-sm text-amber-600">Half Day</p>
-            </div>
-            <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">{attendanceStats.leave}</div>
-              <p className="text-sm text-blue-600">On Leave</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Monthly Attendance Calendar */}
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="md:col-span-2">
+          <AttendanceCalendar attendanceData={monthlyAttendance} />
+        </div>
+        <div>
+          {/* Attendance Stats Summary */}
+          <Card className="h-full">
+            <CardHeader>
+              <CardTitle>This Month</CardTitle>
+              <CardDescription>Summary</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                <span className="text-sm font-medium">Present</span>
+                <span className="text-xl font-bold text-green-600">{attendanceStats.present}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
+                <span className="text-sm font-medium">Absent</span>
+                <span className="text-xl font-bold text-red-600">{attendanceStats.absent}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg">
+                <span className="text-sm font-medium">Half Day</span>
+                <span className="text-xl font-bold text-amber-600">{attendanceStats.halfDay}</span>
+              </div>
+              {/* 
+                    <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                        <span className="text-sm font-medium">On Leave</span>
+                        <span className="text-xl font-bold text-blue-600">{attendanceStats.leave}</span>
+                    </div>
+                    */}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

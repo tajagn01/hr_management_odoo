@@ -6,30 +6,23 @@ const globalForPrisma = global as unknown as {
 
 function createPrismaClient() {
   const client = new PrismaClient({
-    // ✅ FIX: Only log errors in development to improve performance
     log: process.env.NODE_ENV === "development"
-      ? ["error", "warn"]
+      ? [{ emit: 'event', level: 'query' }, "error", "warn"]
       : ["error"],
-    // Add transaction timeout
     transactionOptions: {
-      maxWait: 10000, // 10 seconds max wait for transaction
-      timeout: 30000, // 30 seconds transaction timeout
+      maxWait: 5000, // Reduced from 10s
+      timeout: 10000, // Reduced from 30s
     },
   });
 
-  // Add middleware for query timing (helps debug slow queries)
-  client.$use(async (params, next) => {
-    const before = Date.now();
-    const result = await next(params);
-    const after = Date.now();
-
-    // Log slow queries (over 2 seconds)
-    if (after - before > 2000) {
-      console.warn(`⚠️ Slow query: ${params.model}.${params.action} took ${after - before}ms`);
-    }
-
-    return result;
-  });
+  // Log slow queries only
+  if (process.env.NODE_ENV === "development") {
+    client.$on('query' as never, (e: any) => {
+      if (e.duration > 1000) {
+        console.warn(`⚠️ Slow query: ${e.query} took ${e.duration}ms`);
+      }
+    });
+  }
 
   return client;
 }

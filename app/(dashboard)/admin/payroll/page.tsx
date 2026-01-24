@@ -541,8 +541,83 @@ export default function AdminPayrollPage() {
             </Select>
           </div>
 
+          {/* Mobile Card View - Premium Redesign */}
+          <div className="md:hidden space-y-4">
+            {filteredData.map((employee) => (
+              <div key={employee.id} className="bg-card rounded-xl border shadow-sm relative overflow-hidden">
+                {/* Decorative top pattern */}
+                <div className="h-1.5 w-full bg-linear-to-r from-blue-500 via-indigo-500 to-purple-500 opacity-80"></div>
+
+                <div className="p-4">
+                  {/* Header: Employee & Net Salary */}
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10 border border-border">
+                        <AvatarFallback className="bg-muted text-muted-foreground font-medium">
+                          {employee.name.split(" ").map(n => n[0]).join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-semibold text-sm">{employee.name}</p>
+                        <p className="text-xs text-muted-foreground">{employee.department}</p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">Net Salary</span>
+                      <p className="font-bold text-xl leading-none text-foreground">{formatCurrency(employee.netSalary)}</p>
+                    </div>
+                  </div>
+
+                  {/* Receipt Details */}
+                  <div className="bg-muted/30 rounded-lg p-3 space-y-2 mb-4 font-mono text-sm border border-border/50">
+                    <div className="flex justify-between items-center text-muted-foreground">
+                      <span className="text-xs">Base Salary</span>
+                      <span>{formatCurrency(employee.baseSalary)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-green-600 dark:text-green-500">
+                      <span className="flex items-center gap-1 text-xs"><TrendingUp className="h-3 w-3" /> Bonus</span>
+                      <span>+{formatCurrency(employee.bonus)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-red-600 dark:text-red-400">
+                      <span className="flex items-center gap-1 text-xs"><AlertCircle className="h-3 w-3" /> Deductions</span>
+                      <span>-{formatCurrency(employee.deductions)}</span>
+                    </div>
+                    <div className="border-t border-dashed my-2 opacity-50"></div>
+                    <div className="flex justify-between items-center font-bold">
+                      <span>Total</span>
+                      <span>{formatCurrency(employee.netSalary)}</span>
+                    </div>
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex-1">
+                      {getStatusBadge(employee.status)}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 h-9 rounded-full text-xs font-medium"
+                      onClick={() => handleEditEmployee(employee)}
+                    >
+                      <Edit className="h-3.5 w-3.5 mr-1.5" />
+                      Adjust
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {filteredData.length === 0 && (
+              <div className="text-center py-12 px-4 border-2 border-dashed rounded-xl bg-muted/20">
+                <Banknote className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-muted-foreground font-medium">No payroll records found</p>
+              </div>
+            )}
+          </div>
+
           {/* Table */}
-          <div className="rounded-lg border">
+          <div className="hidden md:block rounded-lg border">
             <div className="overflow-x-auto w-full max-w-[calc(100vw-3rem)] md:max-w-full">
               <table className="w-full whitespace-nowrap">
                 <thead>

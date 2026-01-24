@@ -26,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import {
   Users,
   UserPlus,
+  Calendar,
   Search,
   RefreshCw,
   Download,
@@ -102,7 +103,7 @@ export default function AdminEmployeesPage() {
       phone: emp.phone,
       department: emp.department,
       designation: emp.designation,
-      status: emp.user?.isActive ? "active" : "inactive",
+      status: !emp.user?.isActive ? "inactive" : (!emp.profileCompleted ? "onboarding" : "active"),
       joinDate: new Date(emp.joiningDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       salary: emp.payroll?.netSalary || 0,
       role: emp.user?.role || "EMPLOYEE",
@@ -334,75 +335,108 @@ export default function AdminEmployeesPage() {
 
           {/* Employee List Views */}
 
-          {/* Mobile Card View */}
+          {/* Mobile Card View - Premium Redesign */}
           <div className="md:hidden space-y-4">
             {isLoading && employees.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <Loader2 className="h-8 w-8 animate-spin mb-4" />
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin mb-4 text-primary" />
                 <p>Loading employees...</p>
               </div>
             ) : filteredEmployees.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No employees found matching your filters
+              <div className="text-center py-12 px-4 border-2 border-dashed rounded-xl bg-muted/30">
+                <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                <p className="font-medium text-foreground">No employees found</p>
+                <p className="text-sm text-muted-foreground">Try adjusting your filters</p>
               </div>
             ) : (
               filteredEmployees.map((employee) => (
-                <Card key={employee.id} className="overflow-hidden">
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start mb-4">
+                <div key={employee.id} className="bg-card rounded-xl border shadow-sm overflow-hidden relative">
+                  {/* Status Indicator Strip */}
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 ${employee.status === "active" ? "bg-green-500" : "bg-gray-300"}`} />
+
+                  <div className="p-4 pl-5">
+                    {/* Header: Avatar & Main Info */}
+                    <div className="flex items-start justify-between gap-3 mb-4">
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 border">
-                          <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                            {employee.fullName.split(" ").map(n => n[0]).join("").toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                        <div className="relative">
+                          <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
+                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-lg">
+                              {employee.fullName.split(" ").map(n => n[0]).join("").toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background ${employee.status === "active" ? "bg-green-500" : "bg-gray-400"}`} />
+                        </div>
                         <div>
-                          <p className="font-semibold">{employee.fullName}</p>
-                          <p className="text-xs text-muted-foreground">{employee.email}</p>
-                          {employee.role === "MANAGER" && (
-                            <Badge variant="secondary" className="mt-1 text-[10px] px-1.5 py-0 bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
-                              Manager
+                          <h3 className="font-bold text-base leading-tight">{employee.fullName}</h3>
+                          <p className="text-xs text-muted-foreground truncate max-w-[150px]">{employee.email}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-normal bg-muted/50 border-0">
+                              {employee.designation}
                             </Badge>
-                          )}
+                          </div>
                         </div>
                       </div>
-                      <Badge className={employee.status === "active" ? "bg-green-500 hover:bg-green-600" : "bg-gray-500 hover:bg-gray-600"}>
-                        {employee.status === "active" ? "Active" : "Inactive"}
-                      </Badge>
+
+                      {/* Action Menu */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Eye className="h-4 w-4 mr-2" /> View Profile
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Edit className="h-4 w-4 mr-2" /> Edit Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="text-red-600">
+                            <Trash2 className="h-4 w-4 mr-2" /> Remove
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm border-t pt-3 mb-3">
+                    {/* Quick Info Grid */}
+                    <div className="grid grid-cols-2 gap-3 text-sm bg-muted/30 rounded-lg p-3 mb-3">
                       <div>
-                        <p className="text-muted-foreground text-xs mb-0.5">Department</p>
-                        <p className="font-medium">{employee.department}</p>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Department</span>
+                        <div className="font-medium flex items-center gap-1.5 mt-0.5">
+                          <Building2 className="h-3.5 w-3.5 text-blue-500" />
+                          {employee.department}
+                        </div>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs mb-0.5">Role</p>
-                        <p className="font-medium">{employee.designation}</p>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Joined</span>
+                        <div className="font-medium flex items-center gap-1.5 mt-0.5">
+                          <Calendar className="h-3.5 w-3.5 text-purple-500" />
+                          {employee.joinDate}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-0.5">Salary</p>
-                        <p className="font-medium">{formatCurrency(employee.salary)}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs mb-0.5">Joined</p>
-                        <p className="font-medium">{employee.joinDate}</p>
+                      <div className="col-span-2 pt-2 border-t border-border/50 flex items-center justify-between">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Salary</span>
+                        <span className="font-bold font-mono text-green-600 dark:text-green-500">{formatCurrency(employee.salary)}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 border-t pt-3">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Eye className="h-4 w-4 text-muted-foreground" />
+                    {/* Quick Actions Footer */}
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="flex-1 h-9 text-xs border-dashed" asChild>
+                        <a href={`mailto:${employee.email}`}>
+                          <Mail className="h-3.5 w-3.5 mr-1.5" />
+                          Email
+                        </a>
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                        <Edit className="h-4 w-4 text-blue-500" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600">
-                        <Trash2 className="h-4 w-4 text-red-500" />
+                      <Button variant="outline" size="sm" className="flex-1 h-9 text-xs border-dashed" asChild>
+                        <a href={`tel:${employee.phone}`}>
+                          <Phone className="h-3.5 w-3.5 mr-1.5" />
+                          Call
+                        </a>
                       </Button>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))
             )}
           </div>
@@ -481,8 +515,14 @@ export default function AdminEmployeesPage() {
                         <span className="font-medium">{formatCurrency(employee.salary)}</span>
                       </td>
                       <td className="p-4">
-                        <Badge className={employee.status === "active" ? "bg-green-500 hover:bg-green-600" : "bg-gray-500 hover:bg-gray-600"}>
-                          {employee.status === "active" ? "Active" : "Inactive"}
+                        <Badge className={
+                          employee.status === "active"
+                            ? "bg-green-500 hover:bg-green-600"
+                            : employee.status === "onboarding"
+                              ? "bg-amber-500 hover:bg-amber-600"
+                              : "bg-gray-500 hover:bg-gray-600"
+                        }>
+                          {employee.status === "active" ? "Active" : employee.status === "onboarding" ? "Onboarding" : "Inactive"}
                         </Badge>
                       </td>
                       <td className="p-4">

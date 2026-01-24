@@ -42,6 +42,7 @@ import {
   Sheet,
   SheetContent,
   SheetTrigger,
+  SheetTitle,
 } from "@/components/ui/sheet";
 import { SidebarContent } from "@/components/sidebar";
 
@@ -217,6 +218,7 @@ export default function Navbar() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="p-0 w-72">
+                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                 <SidebarContent onItemClick={() => setIsSheetOpen(false)} />
               </SheetContent>
             </Sheet>

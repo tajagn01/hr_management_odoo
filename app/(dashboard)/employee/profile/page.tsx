@@ -6,13 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Building2, 
-  Briefcase, 
+import {
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Building2,
+  Briefcase,
   Calendar,
   Edit2,
   Save,
@@ -59,7 +59,10 @@ export default function EmployeeProfilePage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/employees?email=${session.user.email}`);
+      const res = await fetch(`/api/employees?email=${session.user.email}`, {
+        cache: "no-store",
+        headers: { "Pragma": "no-cache" }
+      });
       const data = await res.json();
       if (data.employee) {
         setEmployeeData(data.employee);
@@ -108,7 +111,7 @@ export default function EmployeeProfilePage() {
       setIsEditing(false);
       // Refresh employee data
       await fetchEmployeeData();
-      
+
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(""), 3000);
     } catch (err) {
@@ -211,7 +214,7 @@ export default function EmployeeProfilePage() {
                   </AvatarFallback>
                 </Avatar>
                 {isEditing && (
-                  <button 
+                  <button
                     className="absolute bottom-0 right-0 p-2 bg-blue-500 rounded-full text-white hover:bg-blue-600 transition-colors"
                     title="Change profile picture (Coming soon)"
                   >
@@ -225,7 +228,7 @@ export default function EmployeeProfilePage() {
                 <Shield className="h-3 w-3 mr-1" />
                 {employeeData.user?.role || employeeData.role || "EMPLOYEE"}
               </Badge>
-              
+
               <div className="w-full mt-6 pt-6 border-t">
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <Building2 className="h-4 w-4" />
@@ -245,8 +248,8 @@ export default function EmployeeProfilePage() {
           <CardHeader>
             <CardTitle>Personal Information</CardTitle>
             <CardDescription>
-              {isEditing 
-                ? "You can edit your phone number and address" 
+              {isEditing
+                ? "You can edit your phone number and address"
                 : "Your personal and professional details"}
             </CardDescription>
           </CardHeader>
@@ -262,7 +265,7 @@ export default function EmployeeProfilePage() {
                   {employeeData.employeeCode}
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                   <User className="h-4 w-4" />
@@ -309,10 +312,10 @@ export default function EmployeeProfilePage() {
                   Joining Date
                 </label>
                 <div className="p-3 bg-muted rounded-lg">
-                  {new Date(employeeData.joiningDate).toLocaleDateString('en-US', { 
-                    year: 'numeric', 
-                    month: 'long', 
-                    day: 'numeric' 
+                  {new Date(employeeData.joiningDate).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
                   })}
                 </div>
               </div>
@@ -378,7 +381,7 @@ export default function EmployeeProfilePage() {
             <div>
               <h4 className="font-medium text-amber-800">Information Notice</h4>
               <p className="text-sm text-amber-700 mt-1">
-                For changes to your name, email, department, designation, or salary, please contact the HR department. 
+                For changes to your name, email, department, designation, or salary, please contact the HR department.
                 You can only update your phone number and address from this page.
               </p>
             </div>

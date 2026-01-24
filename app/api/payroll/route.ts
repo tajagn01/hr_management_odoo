@@ -14,10 +14,12 @@ export async function GET(request: NextRequest) {
     const employeeId = searchParams.get("employeeId");
 
     // Get current user to check permissions
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email! },
-      include: { employee: true },
-    });
+    // Optimized: Use session data directly
+    const user = {
+      role: session.user.role,
+      email: session.user.email,
+      employee: session.user.employeeId ? { id: session.user.employeeId } : null
+    };
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -76,10 +78,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     // TODO: Validate and save payroll to database using Prisma
-    
-    return NextResponse.json({ 
-      message: "Payroll created", 
-      payroll: body 
+
+    return NextResponse.json({
+      message: "Payroll created",
+      payroll: body
     }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: "Failed to create payroll" }, { status: 500 });
@@ -91,10 +93,10 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
     // TODO: Update payroll in database using Prisma
-    
-    return NextResponse.json({ 
-      message: "Payroll updated", 
-      payroll: body 
+
+    return NextResponse.json({
+      message: "Payroll updated",
+      payroll: body
     });
   } catch (error) {
     return NextResponse.json({ error: "Failed to update payroll" }, { status: 500 });

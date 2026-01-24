@@ -49,8 +49,27 @@ export async function middleware(request: NextRequest) {
     }
 
     // Employee can only access /employee routes
-    if (role === "EMPLOYEE" && !pathname.startsWith("/employee")) {
-      return NextResponse.redirect(new URL("/employee", request.url));
+    if (role === "EMPLOYEE") {
+      // Allow access to complete-profile page
+      if (pathname.startsWith("/employee/complete-profile")) {
+        const profileCompleted = token?.profileCompleted;
+        if (profileCompleted === true) {
+          return NextResponse.redirect(new URL("/employee", request.url));
+        }
+        return NextResponse.next();
+      }
+
+      // Check if profile is incomplete
+      const profileCompleted = token?.profileCompleted;
+      if (profileCompleted === false) {
+        // Redirect to profile completion wizard
+        return NextResponse.redirect(new URL("/employee/complete-profile", request.url));
+      }
+
+      // Restrict access to non-employee routes
+      if (!pathname.startsWith("/employee")) {
+        return NextResponse.redirect(new URL("/employee", request.url));
+      }
     }
   }
 

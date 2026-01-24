@@ -68,6 +68,8 @@ export default function ManagerPage() {
     const [stats, setStats] = useState({
         totalTeamMembers: 0,
         presentToday: 0,
+        absentToday: 0,
+        lateToday: 0,
         pendingLeaves: 0,
     });
 
@@ -91,6 +93,19 @@ export default function ManagerPage() {
             const team = employeesData.employees || [];
             setTeamMembers(team);
 
+            if (team.length === 0) {
+                setStats({
+                    totalTeamMembers: 0,
+                    presentToday: 0,
+                    absentToday: 0,
+                    lateToday: 0,
+                    pendingLeaves: 0,
+                });
+                setLoading(false);
+                setIsRefreshing(false);
+                return;
+            }
+
             // Fetch today's attendance for team
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -102,20 +117,68 @@ export default function ManagerPage() {
             );
             const attendanceData = await attendanceRes.json();
 
-            const presentCount = attendanceData.attendanceRecords?.filter((a: any) =>
-                a.status === "PRESENT" || a.status === "HALF_DAY"
-            ).length || 0;
+            // Calculate Strictly
+            let presentCount = 0;
+            let lateCount = 0;
+            const LATE_THRESHOLD_HOUR = 9;
+            const LATE_THRESHOLD_MINUTE = 30;
+
+            const records = attendanceData.attendanceRecords || [];
+
+            records.forEach((a: any) => {
+                const status = a.status?.toUpperCase();
+                const isPresent = status === "PRESENT" || status === "HALF_DAY" || (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE");
+
+                if (isPresent) {
+                    presentCount++;
+                    // Check Late
+                    if (a.checkIn) {
+                        const checkInTime = new Date(a.checkIn);
+                        const thresholdTime = new Date(checkInTime);
+                        thresholdTime.setHours(LATE_THRESHOLD_HOUR, LATE_THRESHOLD_MINUTE, 0, 0);
+                        if (checkInTime > thresholdTime) {
+                            lateCount++;
+                        }
+                    }
+                }
+            });
 
             // Fetch leave requests
             const leaveRes = await fetch("/api/leave");
             const leaveData = await leaveRes.json();
-            const pendingLeaves = leaveData.leaveRequests?.filter((lr: any) =>
-                lr.status === "PENDING"
-            ).length || 0;
+
+            // Count On Leave Today (Approved & Overlapping)
+            const onLeaveToday = leaveData.leaveRequests?.filter((lr: any) => {
+                if (lr.status !== "APPROVED") return false;
+                // Ideally check if employee is in team members list too, assuming /api/leave filters by manager visibility/team or we assume we see all and must filter
+                const isTeam = team.some((m: TeamMember) => m.id === lr.employeeId);
+                if (!isTeam) return false;
+
+                const start = new Date(lr.startDate);
+                const end = new Date(lr.endDate);
+                const now = new Date();
+                now.setHours(0, 0, 0, 0);
+                return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
+            }).length || 0;
+
+            const pendingLeaves = leaveData.leaveRequests?.filter((lr: any) => {
+                const isPending = lr.status === "PENDING";
+                if (!isPending) return false;
+
+                // Strict Team Scope Check
+                const isTeam = team.some((m: TeamMember) => m.id === lr.employeeId);
+                return isTeam;
+            }).length || 0;
+
+            // Calculate Absent
+            const calculatedAbsent = team.length - presentCount - onLeaveToday;
+            const absentCount = calculatedAbsent > 0 ? calculatedAbsent : 0;
 
             setStats({
                 totalTeamMembers: team.length,
                 presentToday: presentCount,
+                absentToday: absentCount,
+                lateToday: lateCount,
                 pendingLeaves,
             });
 
@@ -187,8 +250,15 @@ export default function ManagerPage() {
             textColor: "text-green-600 dark:text-green-400",
         },
         {
-            title: "Pending Approvals",
-            value: stats.pendingLeaves.toString(),
+            title: "Absent",
+            value: stats.absentToday.toString(),
+            icon: UserCheck,
+            lightColor: "bg-red-100 dark:bg-red-900",
+            textColor: "text-red-600 dark:text-red-400",
+        },
+        {
+            title: "Late Arrivals",
+            value: stats.lateToday.toString(),
             icon: Clock,
             lightColor: "bg-amber-100 dark:bg-amber-900",
             textColor: "text-amber-600 dark:text-amber-400",

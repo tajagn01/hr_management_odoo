@@ -60,12 +60,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           }
 
           console.log("✅ Authentication successful!");
-          
+
           return {
             id: user.id,
             email: user.email,
             name: user.employee?.fullName || user.email,
             role: user.role,
+            employeeId: user.employee?.id,
+            profileCompleted: user.employee?.profileCompleted ?? false,
           };
         } catch (error) {
           console.error("💥 Auth error:", error);
@@ -75,17 +77,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
+        token.employeeId = (user as any).employeeId;
+        token.profileCompleted = (user as any).profileCompleted;
       }
+
+      // Allow updating session manually from client
+      if (trigger === "update" && session) {
+        if (session.profileCompleted !== undefined) {
+          token.profileCompleted = session.profileCompleted;
+        }
+      }
+
       return token;
     },
     session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role;
+        (session.user as any).employeeId = token.employeeId;
+        (session.user as any).profileCompleted = token.profileCompleted;
       }
       return session;
     },
