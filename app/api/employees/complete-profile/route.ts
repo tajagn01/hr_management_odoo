@@ -39,7 +39,7 @@ export async function PATCH(request: Request) {
         });
 
         // Invalidate cache
-        revalidateTag(TAGS.employees);
+        revalidateTag(TAGS.employees, "max");
 
         return NextResponse.json({
             success: true,
