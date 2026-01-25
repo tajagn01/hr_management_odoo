@@ -35,6 +35,7 @@ interface FormData {
     joiningDate: Date | undefined;
     department: string;
     designation: string;
+    managerId: string;
 }
 
 // --- Components ---
@@ -116,6 +117,22 @@ export default function CompleteProfilePage() {
     const [currentStep, setCurrentStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [direction, setDirection] = useState(0); // -1 for back, 1 for next
+    const [managers, setManagers] = useState<{ id: string; fullName: string; designation: string }[]>([]);
+
+    useEffect(() => {
+        async function fetchManagers() {
+            try {
+                const res = await fetch("/api/public/managers");
+                if (res.ok) {
+                    const data = await res.json();
+                    setManagers(data);
+                }
+            } catch (err) {
+                console.error("Failed to fetch managers", err);
+            }
+        }
+        fetchManagers();
+    }, []);
 
     // Form data
     const [formData, setFormData] = useState<FormData>({
@@ -125,7 +142,8 @@ export default function CompleteProfilePage() {
         address: "",
         joiningDate: undefined,
         department: "",
-        designation: ""
+        designation: "",
+        managerId: ""
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -170,6 +188,9 @@ export default function CompleteProfilePage() {
                     newErrors.designation = "Designation is required";
                 }
                 break;
+            case 8:
+                // Manager is optional, but if we wanted to enforce it we would check here.
+                break;
         }
 
         setErrors(newErrors);
@@ -179,7 +200,7 @@ export default function CompleteProfilePage() {
     const handleNext = () => {
         if (validateStep()) {
             setDirection(1);
-            setCurrentStep(prev => Math.min(prev + 1, 7));
+            setCurrentStep(prev => Math.min(prev + 1, 8));
         }
     };
 
@@ -255,7 +276,7 @@ export default function CompleteProfilePage() {
                         <motion.div
                             className="h-full bg-primary transition-all duration-300 ease-in-out"
                             initial={{ width: 0 }}
-                            animate={{ width: `${(currentStep / 7) * 100}%` }}
+                            animate={{ width: `${(currentStep / 8) * 100}%` }}
                         />
                     </div>
 
@@ -263,7 +284,7 @@ export default function CompleteProfilePage() {
                         <div className="flex items-center justify-between">
                             <div className="space-y-1">
                                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                    Step {currentStep} of 7
+                                    Step {currentStep} of 8
                                 </span>
                                 <CardTitle className="text-2xl font-bold tracking-tight">
                                     {currentStep === 1 && "Welcome Aboard"}
@@ -273,6 +294,7 @@ export default function CompleteProfilePage() {
                                     {currentStep === 5 && "Employment"}
                                     {currentStep === 6 && "Department"}
                                     {currentStep === 7 && "Your Role"}
+                                    {currentStep === 8 && "Reporting Manager"}
                                 </CardTitle>
                             </div>
                         </div>
@@ -284,6 +306,7 @@ export default function CompleteProfilePage() {
                             {currentStep === 5 && "When did you join the team?"}
                             {currentStep === 6 && "Which department are you joining?"}
                             {currentStep === 7 && "What is your official designation?"}
+                            {currentStep === 8 && "Who will you be reporting to?"}
                         </CardDescription>
                     </CardHeader>
 
@@ -518,6 +541,31 @@ export default function CompleteProfilePage() {
                                         {errors.designation && <p className="text-destructive text-sm font-medium ml-1">{errors.designation}</p>}
                                     </div>
                                 )}
+
+                                {/* Step 8: Manager Selection */}
+                                {currentStep === 8 && (
+                                    <div className="space-y-4">
+                                        <Select value={formData.managerId} onValueChange={(value) => setFormData({ ...formData, managerId: value })}>
+                                            <SelectTrigger className="h-12 text-base">
+                                                <SelectValue placeholder="Select Reporting Manager (Optional)" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {managers.length === 0 && (
+                                                    <div className="p-2 text-sm text-muted-foreground text-center">No managers found</div>
+                                                )}
+                                                {managers.map((manager) => (
+                                                    <SelectItem key={manager.id} value={manager.id}>
+                                                        {manager.fullName} ({manager.designation})
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-muted-foreground ml-1">
+                                            If you don't see your manager, you can assign one later or ask HR.
+                                        </p>
+                                    </div>
+                                )}
+
                             </motion.div>
                         </AnimatePresence>
                     </CardContent>
@@ -535,7 +583,7 @@ export default function CompleteProfilePage() {
                         )}
 
                         <Button
-                            onClick={currentStep === 7 ? handleSubmit : handleNext}
+                            onClick={currentStep === 8 ? handleSubmit : handleNext}
                             disabled={isSubmitting}
                             className={cn(
                                 "flex-1 ml-auto h-12 text-lg font-semibold",
@@ -547,7 +595,7 @@ export default function CompleteProfilePage() {
                                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                                     Finalizing...
                                 </>
-                            ) : currentStep === 7 ? (
+                            ) : currentStep === 8 ? (
                                 <>
                                     Complete Profile
                                     <Check className="ml-2 h-5 w-5" />

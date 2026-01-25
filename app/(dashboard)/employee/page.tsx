@@ -95,7 +95,7 @@ export default function EmployeePage() {
 
     try {
       setLoading(true);
-      const res = await fetch(`/api/employees/${session.user.employeeId}/overview`);
+      const res = await fetch(`/api/employees/${session.user.employeeId}/overview`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch dashboard data");
 
       const data = await res.json();

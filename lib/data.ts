@@ -6,6 +6,7 @@ export const TAGS = {
     employees: "employees",
     attendance: "attendance",
     leaves: "leaves",
+    payroll: "payroll",
 };
 
 // -----------------------------------------------------------------------------
@@ -130,8 +131,8 @@ export const getEmployeeOverviewCached = unstable_cache(
             }
         };
     },
-    ["employee-overview-aggregate"], // Key
-    { tags: [TAGS.employees, TAGS.attendance, TAGS.leaves], revalidate: 300 } // Increased from 60s to 5min for better caching
+    ["employee-overview-aggregate-v2"], // Key
+    { tags: [TAGS.employees, TAGS.attendance, TAGS.leaves, TAGS.payroll], revalidate: 300 } // Increased from 60s to 5min for better caching
 );
 
 // -----------------------------------------------------------------------------
@@ -152,7 +153,7 @@ export const getEmployeesCached = unstable_cache(
         });
         return employees;
     },
-    ["employees-list"],
+    ["employees-list-v3"],
     { tags: [TAGS.employees], revalidate: 1 }
 );
 

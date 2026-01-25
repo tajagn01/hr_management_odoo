@@ -1,7 +1,9 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { logger } from "@/lib/logger";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   // Don't use adapter with Credentials provider - it's incompatible
@@ -9,6 +11,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     strategy: "jwt", // Use JWT sessions for Credentials provider
   },
   providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
     Credentials({
       credentials: {
         email: { label: "Email", type: "email" },
@@ -16,7 +22,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
       authorize: async (credentials) => {
         if (!credentials?.email || !credentials?.password) {
-          console.log("❌ Missing credentials");
+          logger.warn("Missing credentials in login attempt");
           throw new Error("Missing credentials");
         }
 
@@ -24,42 +30,38 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const email = credentials.email as string;
           const password = credentials.password as string;
 
-          console.log("🔍 Attempting to find user:", email);
+          logger.debug("Attempting to find user", { email });
 
           const user = await prisma.user.findUnique({
             where: { email },
             include: { employee: true },
           }).catch((err: unknown) => {
-            console.error("💥 Database error finding user:", err);
-            console.error("💥 Full error details:", JSON.stringify(err, null, 2));
+            logger.error("Database error finding user", err, { email });
             throw new Error("Database connection failed. Please try again.");
           });
 
-          console.log("👤 User found:", user ? "Yes" : "No");
-          if (user) {
-            console.log("👤 User details:", { email: user.email, role: user.role, isActive: user.isActive, emailVerified: user.emailVerified });
-          }
+          logger.debug("User lookup result", { found: !!user, email });
 
           if (!user || !user.isActive) {
-            console.log("❌ User not found or inactive");
+            logger.warn("Invalid login attempt - user not found or inactive", { email });
             throw new Error("Invalid credentials");
           }
 
           // Check if email is verified
           if (!user.emailVerified) {
-            console.log("❌ Email not verified");
+            logger.warn("Login attempt with unverified email", { email });
             throw new Error("Please verify your email address before logging in. Check your inbox for the verification code.");
           }
 
           const isPasswordValid = await bcrypt.compare(password, user.password);
-          console.log("🔑 Password valid:", isPasswordValid);
+          logger.debug("Password validation", { valid: isPasswordValid, email });
 
           if (!isPasswordValid) {
-            console.log("❌ Invalid password");
+            logger.warn("Invalid password attempt", { email });
             throw new Error("Invalid credentials");
           }
 
-          console.log("✅ Authentication successful!");
+          logger.info("Authentication successful", { email, role: user.role });
 
           return {
             id: user.id,
@@ -70,13 +72,72 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             profileCompleted: user.employee?.profileCompleted ?? false,
           };
         } catch (error) {
-          console.error("💥 Auth error:", error);
+          logger.error("Auth error", error);
           throw error;
         }
       },
     }),
   ],
   callbacks: {
+    async signIn({ user, account, profile }) {
+      // Handle Google OAuth sign-in
+      if (account?.provider === "google") {
+        try {
+          const email = user.email!;
+
+          // Check if user exists
+          let existingUser = await prisma.user.findUnique({
+            where: { email },
+            include: { employee: true },
+          });
+
+          if (!existingUser) {
+            // Create new user with Google OAuth
+            logger.info("Creating new user via Google OAuth", { email });
+
+            const employeeCount = await prisma.employee.count();
+            const employeeCode = `EMP${String(employeeCount + 1).padStart(4, "0")}`;
+
+            existingUser = await prisma.user.create({
+              data: {
+                email,
+                password: "", // No password for OAuth users
+                role: "EMPLOYEE",
+                isActive: true,
+                emailVerified: true, // Google OAuth emails are pre-verified
+                employee: {
+                  create: {
+                    employeeCode,
+                    fullName: user.name || email,
+                    designation: "Employee",
+                    department: "General",
+                    joiningDate: new Date(),
+                  },
+                },
+              },
+              include: { employee: true },
+            });
+
+            logger.info("User created via Google OAuth", { email, employeeCode });
+          } else {
+            logger.info("Existing user logged in via Google OAuth", { email });
+          }
+
+          // Attach user data to the user object for JWT callback
+          (user as any).id = existingUser.id;
+          (user as any).role = existingUser.role;
+          (user as any).employeeId = existingUser.employee?.id;
+          (user as any).profileCompleted = existingUser.employee?.profileCompleted ?? false;
+
+          return true;
+        } catch (error) {
+          logger.error("Error in Google OAuth sign-in", error, { email: user.email });
+          return false;
+        }
+      }
+
+      return true;
+    },
     jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;

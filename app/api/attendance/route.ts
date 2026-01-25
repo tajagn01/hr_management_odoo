@@ -8,6 +8,7 @@ import {
   emitDashboardStats
 } from "@/lib/realtime-emitter";
 import { updateMonthlyAttendance } from "@/lib/attendance-aggregator";
+import { logger } from "@/lib/logger";
 
 // GET attendance records
 export async function GET(request: NextRequest) {
@@ -140,7 +141,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Error fetching attendance:", error);
+    logger.error("Error fetching attendance", error);
     return NextResponse.json({ error: "Failed to fetch attendance records" }, { status: 500 });
   }
 }
@@ -309,13 +310,12 @@ export async function POST(request: NextRequest) {
         timestamp: now.toISOString(),
       });
 
-      // ...
       // Trigger monthly attendance aggregation update
       try {
         await updateMonthlyAttendance(employeeId, now);
-        console.log(`✅ Monthly attendance updated for employee ${employeeId}`);
+        logger.info("Monthly attendance updated", { employeeId });
       } catch (error) {
-        console.error("Error updating monthly attendance:", error);
+        logger.error("Error updating monthly attendance", error, { employeeId });
         // Don't fail the check-out if aggregation fails
       }
     } else {
@@ -330,7 +330,7 @@ export async function POST(request: NextRequest) {
       timestamp: now.toISOString(),
     }, { status: 201 });
   } catch (error) {
-    console.error("Error recording attendance:", error);
+    logger.error("Error recording attendance", error);
     return NextResponse.json({ error: "Failed to record attendance" }, { status: 500 });
   }
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { signIn } from "next-auth/react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -152,6 +153,7 @@ export default function RegisterPage() {
         <Button
           type="button"
           variant="outline"
+          onClick={() => signIn("google", { callbackUrl: "/admin" })}
           className="w-full py-2 h-10 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg transition-all"
         >
           <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">

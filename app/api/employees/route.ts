@@ -18,12 +18,17 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get("id");
     const includePayroll = searchParams.get("includePayroll") === "true";
 
-    // Optimized: Use session data directly - removing blocking DB call
     const user = {
       role: (session.user as any).role,
       email: session.user.email,
       employee: (session.user as any).employeeId ? { id: (session.user as any).employeeId } : null
     };
+
+    console.log("API/EMPLOYEES GET:", {
+      email: user.email,
+      role: user.role,
+      employeeId: user.employee?.id
+    });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -60,7 +65,39 @@ export async function GET(request: NextRequest) {
     // 3. Get List (Cached)
     let employees;
     if (user.role === "ADMIN") {
-      employees = await getEmployeesCached(undefined, includePayroll);
+      // Use direct DB call to ensure fresh data for admins (bypassing cache issues)
+      employees = await prisma.employee.findMany({
+        select: {
+          id: true,
+          fullName: true,
+          employeeCode: true,
+          designation: true,
+          department: true,
+          phone: true,
+          joiningDate: true,
+          profileImage: true,
+          user: {
+            select: {
+              email: true,
+              role: true,
+              isActive: true
+            }
+          },
+          ...(includePayroll && {
+            payroll: {
+              select: {
+                id: true,
+                basicSalary: true,
+                netSalary: true,
+                allowances: true,
+                deductions: true,
+                hra: true
+              }
+            }
+          })
+        },
+        orderBy: { fullName: "asc" },
+      });
     } else if (user.role === "MANAGER" && user.employee) {
       employees = await getEmployeesCached(user.employee.id, includePayroll);
     } else {

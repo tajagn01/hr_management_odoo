@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { logger } from "./logger";
 
 // Email configuration interface
 interface EmailConfig {
@@ -24,16 +25,17 @@ function createTransporter() {
   const SMTP_FROM = process.env.SMTP_FROM;
   const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "DayFlow HRMS";
 
-  console.log("\n📧 Email Configuration Check:");
-  console.log("   SMTP_HOST:", SMTP_HOST || "❌ Not set");
-  console.log("   SMTP_PORT:", SMTP_PORT || "❌ Not set");
-  console.log("   SMTP_USER:", SMTP_USER || "❌ Not set");
-  console.log("   SMTP_PASSWORD:", SMTP_PASSWORD ? "✅ Set" : "❌ Not set");
-  console.log("   SMTP_FROM:", SMTP_FROM || "❌ Not set");
+  logger.debug("Email Configuration Check", {
+    SMTP_HOST: SMTP_HOST || "Not set",
+    SMTP_PORT: SMTP_PORT || "Not set",
+    SMTP_USER: SMTP_USER || "Not set",
+    SMTP_PASSWORD: SMTP_PASSWORD ? "Set" : "Not set",
+    SMTP_FROM: SMTP_FROM || "Not set"
+  });
 
   // If all SMTP config is provided, use it
   if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASSWORD && SMTP_FROM) {
-    console.log("   ✅ Using custom SMTP configuration");
+    logger.info("Using custom SMTP configuration");
     return nodemailer.createTransport({
       host: SMTP_HOST,
       port: parseInt(SMTP_PORT),
@@ -47,7 +49,7 @@ function createTransporter() {
 
   // Option 2: Use Gmail (if only user/password provided)
   if (SMTP_USER && SMTP_PASSWORD && !SMTP_HOST) {
-    console.log("   ✅ Using Gmail SMTP");
+    logger.info("Using Gmail SMTP");
     return nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -57,7 +59,7 @@ function createTransporter() {
     });
   }
 
-  console.log("   ⚠️ No email service configured - OTP will be in console\n");
+  logger.warn("No email service configured - OTP will be logged to console");
   return null;
 }
 
@@ -71,8 +73,8 @@ export async function sendOTPEmail(
     const transporter = createTransporter();
 
     if (!transporter) {
-      console.log("⚠️ Email service not configured. OTP for", to, ":", otp);
-      console.log("⚠️ ⚠️ ⚠️ USE THIS OTP TO VERIFY:", otp, "⚠️ ⚠️ ⚠️");
+      logger.warn("Email service not configured - OTP logged to console", { to, otp });
+      logger.warn("USE THIS OTP TO VERIFY", { otp });
       return { success: true }; // Allow registration even without email
     }
 
@@ -172,24 +174,12 @@ export async function sendOTPEmail(
       `,
     };
 
-    console.log("📤 Attempting to send email to:", to);
+    logger.debug("Attempting to send email", { to });
     const info = await transporter.sendMail(mailOptions);
-    console.log("✅ Email sent successfully to:", to);
-    console.log("   Message ID:", info.messageId);
-    console.log("   Response:", info.response);
+    logger.emailSent(to, mailOptions.subject);
     return { success: true };
   } catch (error: any) {
-    console.error("\n❌ ERROR SENDING EMAIL:");
-    console.error("   To:", to);
-    console.error("   Error Code:", error.code);
-    console.error("   Error Message:", error.message);
-    if (error.response) {
-      console.error("   SMTP Response:", error.response);
-    }
-    if (error.responseCode) {
-      console.error("   Response Code:", error.responseCode);
-    }
-    console.error("");
+    logger.emailFailed(to, error);
     return {
       success: false,
       error: error.message || "Failed to send email",
@@ -211,10 +201,10 @@ export async function testEmailConfig(): Promise<{ success: boolean; error?: str
 
     // Verify connection
     await transporter.verify();
-    console.log("✅ Email server connection verified");
+    logger.info("Email server connection verified");
     return { success: true };
   } catch (error: any) {
-    console.error("❌ Email configuration test failed:", error);
+    logger.error("Email configuration test failed", error);
     return {
       success: false,
       error: error.message || "Failed to connect to email server",

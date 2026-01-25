@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
 import { TAGS } from "@/lib/data";
+import { logger } from "@/lib/logger";
 
 export async function PATCH(request: Request) {
     try {
@@ -13,8 +14,8 @@ export async function PATCH(request: Request) {
         }
 
         const body = await request.json();
-        console.log("Received complete-profile body:", body);
-        const { fullName, dateOfBirth, phone, address, joiningDate, department, designation } = body;
+        logger.debug("Complete profile request", { employeeId: (session?.user as any)?.employeeId });
+        const { fullName, dateOfBirth, phone, address, joiningDate, department, designation, managerId } = body;
 
         // Validate required fields
         if (!fullName || !dateOfBirth || !phone || !address || !joiningDate || !department || !designation) {
@@ -35,6 +36,7 @@ export async function PATCH(request: Request) {
                 joiningDate: new Date(joiningDate),
                 department,
                 designation,
+                managerId: managerId || undefined,
                 profileCompleted: true
             }
         });
@@ -47,7 +49,7 @@ export async function PATCH(request: Request) {
             employee: updatedEmployee
         });
     } catch (error) {
-        console.error("Error completing profile:", error);
+        logger.error("Error completing profile", error);
         return NextResponse.json(
             { error: "Failed to complete profile" },
             { status: 500 }

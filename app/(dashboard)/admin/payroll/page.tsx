@@ -46,7 +46,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface PayrollData {
-  id: string;
+  id: string; // Employee ID
+  payrollId?: string; // Payroll Record ID
   name: string;
   email: string;
   department: string;
@@ -111,7 +112,7 @@ export default function AdminPayrollPage() {
   const { data: employeesData, isLoading: isLoadingPayroll, isRefetching, refetch } = useQuery({
     queryKey: ['employees', 'with-payroll'],
     queryFn: async () => {
-      const res = await fetch("/api/employees?includePayroll=true");
+      const res = await fetch("/api/employees?includePayroll=true", { cache: "no-store" });
       return res.json();
     },
     staleTime: Infinity,
@@ -133,6 +134,7 @@ export default function AdminPayrollPage() {
 
         return {
           id: emp.id,
+          payrollId: payrollInfo.id, // Capture real payroll ID if it exists
           name: emp.fullName,
           email: emp.user?.email || "",
           department: emp.department,
@@ -232,32 +234,52 @@ export default function AdminPayrollPage() {
     if (!selectedEmployee) return;
 
     try {
+      const isUpdate = !!selectedEmployee.payrollId;
+      const method = isUpdate ? "PUT" : "POST";
+
+      const payload: any = {
+        basicSalary: editFormData.baseSalary,
+        hra: editFormData.hra,
+        allowances: editFormData.allowances,
+        deductions: editFormData.deductions,
+      };
+
+      if (isUpdate) {
+        payload.id = selectedEmployee.payrollId;
+      } else {
+        payload.employeeId = selectedEmployee.id;
+      }
+
       const res = await fetch("/api/payroll", {
-        method: "PUT",
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: selectedEmployee.id,
-          basicSalary: editFormData.baseSalary,
-          hra: editFormData.hra,
-          allowances: editFormData.allowances,
-          deductions: editFormData.deductions,
-        }),
+        body: JSON.stringify(payload),
       });
 
+      const data = await res.json();
+
       if (res.ok) {
-        // Update local state
-        setPayrollData(prev => prev.map(emp =>
-          emp.id === selectedEmployee.id
-            ? {
-              ...emp,
-              baseSalary: editFormData.baseSalary,
-              bonus: editFormData.allowances,
-              deductions: editFormData.deductions,
-              netSalary: (editFormData.baseSalary + editFormData.hra + editFormData.allowances) - editFormData.deductions,
-            }
-            : emp
-        ));
+        // Update local state - verify success first
+        // If it was a create (POST), we need to refetch to get the new payroll ID
+        if (!isUpdate) {
+          await refetch();
+        } else {
+          // Optimistic update for edits
+          setPayrollData(prev => prev.map(emp =>
+            emp.id === selectedEmployee.id
+              ? {
+                ...emp,
+                baseSalary: editFormData.baseSalary,
+                bonus: editFormData.allowances,
+                deductions: editFormData.deductions,
+                netSalary: (editFormData.baseSalary + editFormData.hra + editFormData.allowances) - editFormData.deductions,
+              }
+              : emp
+          ));
+        }
         setIsEditDialogOpen(false);
+      } else {
+        console.error("Failed to save payroll:", data.error);
       }
     } catch (error) {
       console.error("Error updating payroll:", error);

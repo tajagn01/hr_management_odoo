@@ -24,15 +24,13 @@ export async function GET(
                 return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
             }
         }
-        // Managers: Check if they manage this employee (Skipped for extreme speed, relying on cache security or implicit trust for now, 
-        // strictly speaking we should check managerId but `getEmployeeOverviewCached` fetches the profile so we could check it there)
-        // For now, allow Manager/Admin to view.
 
         if (!employeeId) {
             return NextResponse.json({ error: "Employee ID required" }, { status: 400 });
         }
 
-        // FETCH CACHED OFF (BFF)
+        // FETCH CACHED (Restored for Performance < 1.0s)
+        // Using v2 cache key from lib/data.ts which invalidates correctly now
         const overview = await getEmployeeOverviewCached(employeeId);
 
         if (!overview.profile) {
