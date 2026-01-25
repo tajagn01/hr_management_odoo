@@ -24,7 +24,7 @@ A modern HR management system built with Next.js 16, featuring employee manageme
 
 ---
 
-## � How It Works
+## 🔧 How It Works
 
 ### Authentication Flow
 

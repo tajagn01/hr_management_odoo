@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendOTPEmail } from "@/lib/email";
+import { logger } from "@/lib/logger";
+import { rateLimit, RateLimitPresets } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResult = rateLimit(request, RateLimitPresets.moderate);
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
+
   try {
     const body = await request.json();
     const { email, otp } = body;
@@ -29,9 +37,9 @@ export async function POST(request: NextRequest) {
     // Check if already verified
     if (user.emailVerified) {
       return NextResponse.json(
-        { 
+        {
           message: "Email already verified. You can now login.",
-          verified: true 
+          verified: true
         },
         { status: 200 }
       );
@@ -71,7 +79,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Verification error:", error);
+    logger.error("Verification error", error);
     return NextResponse.json(
       { error: "An error occurred during verification. Please try again." },
       { status: 500 }
@@ -81,6 +89,12 @@ export async function POST(request: NextRequest) {
 
 // Resend OTP endpoint
 export async function PUT(request: NextRequest) {
+  // Apply strict rate limiting for OTP resend
+  const rateLimitResult = rateLimit(request, RateLimitPresets.otpResend);
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
+
   try {
     const body = await request.json();
     const { email } = body;
@@ -126,10 +140,10 @@ export async function PUT(request: NextRequest) {
 
     // Send OTP email using custom email service
     const emailResult = await sendOTPEmail(email, otp, user.employee?.fullName || "User");
-    
+
     if (!emailResult.success) {
-      console.error("❌ Failed to send OTP email:", emailResult.error);
-      console.error("❌ OTP NOT sent via email. Use this OTP:", otp);
+      logger.error("Failed to send OTP email", emailResult.error, { email });
+      logger.warn("OTP NOT sent via email", { otp });
     }
 
     return NextResponse.json(
@@ -139,7 +153,7 @@ export async function PUT(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error("Resend OTP error:", error);
+    logger.error("Resend OTP error", error);
     return NextResponse.json(
       { error: "Failed to resend OTP. Please try again." },
       { status: 500 }

@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  DollarSign, 
-  TrendingUp, 
+import {
+  DollarSign,
+  TrendingUp,
   TrendingDown,
   Calendar,
   Download,
@@ -48,14 +48,20 @@ export default function EmployeePayrollPage() {
 
   // Fetch payroll data
   const fetchPayroll = useCallback(async (empId: string) => {
+    if (!empId) {
+      console.warn("fetchPayroll called with invalid employeeId");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/payroll?employeeId=${empId}`);
+      const res = await fetch(`/api/payroll?employeeId=${empId}`, { cache: "no-store" });
       const data = await res.json();
-      
+
       if (data.payroll) {
         // Calculate gross salary (basic + hra + allowances)
         const gross = data.payroll.basicSalary + data.payroll.hra + data.payroll.allowances;
-        
+
         // Calculate breakdown (estimate allowances based on common structure)
         const allowancesBreakdown = {
           transport: Math.round(data.payroll.allowances * 0.3),
@@ -200,7 +206,7 @@ export default function EmployeePayrollPage() {
               </div>
               <span className="font-semibold">{formatCurrency(payroll.basicSalary)}</span>
             </div>
-            
+
             <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-100 rounded-lg">
@@ -258,7 +264,7 @@ export default function EmployeePayrollPage() {
               </div>
               <span className="font-semibold text-red-600">-{formatCurrency(payroll.deductionsBreakdown.pf)}</span>
             </div>
-            
+
             <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-100 rounded-lg">
@@ -350,7 +356,7 @@ export default function EmployeePayrollPage() {
             <div>
               <h4 className="font-medium text-blue-800">Information</h4>
               <p className="text-sm text-blue-700 mt-1">
-                This is a read-only view of your payroll. For any discrepancies or queries regarding 
+                This is a read-only view of your payroll. For any discrepancies or queries regarding
                 your salary, please contact the HR or Payroll department. You cannot modify any payroll data.
               </p>
             </div>

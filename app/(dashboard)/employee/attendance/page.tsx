@@ -6,10 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Clock, 
-  LogIn, 
-  LogOut, 
+import { AttendanceCalendar } from "@/components/dashboard/attendance-calendar";
+import {
+  Clock,
+  LogIn,
+  LogOut,
   Calendar,
   CheckCircle2,
   XCircle,
@@ -113,7 +114,7 @@ export default function EmployeeAttendancePage() {
         `/api/attendance?employeeId=${empId}&startDate=${today.toISOString()}&endDate=${tomorrow.toISOString()}`
       );
       const data = await res.json();
-      
+
       if (data.attendanceRecords && data.attendanceRecords.length > 0) {
         const todayRecord = data.attendanceRecords[0];
         setIsCheckedIn(!!todayRecord.checkIn);
@@ -137,13 +138,13 @@ export default function EmployeeAttendancePage() {
         `/api/attendance?employeeId=${empId}&startDate=${firstDayOfMonth.toISOString()}&endDate=${lastDayOfMonth.toISOString()}`
       );
       const data = await res.json();
-      
+
       if (data.attendanceRecords) {
         const formatted = data.attendanceRecords.map((record: any) => {
           const date = new Date(record.date);
           const checkIn = record.checkIn ? new Date(record.checkIn) : null;
           const checkOut = record.checkOut ? new Date(record.checkOut) : null;
-          
+
           let hours = "-";
           if (checkIn && checkOut) {
             const diff = checkOut.getTime() - checkIn.getTime();
@@ -190,6 +191,18 @@ export default function EmployeeAttendancePage() {
   const handleCheckIn = async () => {
     if (!employeeId) return;
 
+    // Snapshot previous state for rollback
+    const prevIsCheckedIn = isCheckedIn;
+    const prevIsCheckedOut = isCheckedOut;
+    const prevCheckInTime = checkInTime;
+
+    // Optimistic Update
+    const now = new Date();
+    setCheckInTime(now);
+    setIsCheckedIn(true);
+    setIsCheckedOut(false);
+    setCheckOutTime(null);
+
     try {
       const res = await fetch("/api/attendance", {
         method: "POST",
@@ -199,28 +212,44 @@ export default function EmployeeAttendancePage() {
 
       if (res.ok) {
         const data = await res.json();
-        const now = new Date(data.attendance.checkIn);
-        setCheckInTime(now);
-        setIsCheckedIn(true);
-        setIsCheckedOut(false);
-        setCheckOutTime(null);
-        // Refresh monthly attendance
+        // Update with server time just to be precise
+        const serverNow = new Date(data.attendance.checkIn);
+        setCheckInTime(serverNow);
+
+        // Refresh data in background without blocking UI
         if (employeeId) {
-          await fetchMonthlyAttendance(employeeId);
-          await fetchTodayAttendance(employeeId);
+          fetchMonthlyAttendance(employeeId);
+          fetchTodayAttendance(employeeId);
         }
       } else {
+        // Rollback on error
         const error = await res.json();
         alert(error.error || "Failed to check in");
+        setIsCheckedIn(prevIsCheckedIn);
+        setIsCheckedOut(prevIsCheckedOut);
+        setCheckInTime(prevCheckInTime);
       }
     } catch (error) {
       console.error("Error checking in:", error);
       alert("Failed to check in");
+      // Rollback on error
+      setIsCheckedIn(prevIsCheckedIn);
+      setIsCheckedOut(prevIsCheckedOut);
+      setCheckInTime(prevCheckInTime);
     }
   };
 
   const handleCheckOut = async () => {
     if (!employeeId) return;
+
+    // Snapshot previous state for rollback
+    const prevIsCheckedOut = isCheckedOut;
+    const prevCheckOutTime = checkOutTime;
+
+    // Optimistic Update
+    const now = new Date();
+    setCheckOutTime(now);
+    setIsCheckedOut(true);
 
     try {
       const res = await fetch("/api/attendance", {
@@ -231,21 +260,27 @@ export default function EmployeeAttendancePage() {
 
       if (res.ok) {
         const data = await res.json();
-        const now = new Date(data.attendance.checkOut);
-        setCheckOutTime(now);
-        setIsCheckedOut(true);
-        // Refresh monthly attendance
+        const serverNow = new Date(data.attendance.checkOut);
+        setCheckOutTime(serverNow);
+
+        // Refresh data in background without blocking UI
         if (employeeId) {
-          await fetchMonthlyAttendance(employeeId);
-          await fetchTodayAttendance(employeeId);
+          fetchMonthlyAttendance(employeeId);
+          fetchTodayAttendance(employeeId);
         }
       } else {
+        // Rollback on error
         const error = await res.json();
         alert(error.error || "Failed to check out");
+        setIsCheckedOut(prevIsCheckedOut);
+        setCheckOutTime(prevCheckOutTime);
       }
     } catch (error) {
       console.error("Error checking out:", error);
       alert("Failed to check out");
+      // Rollback on error
+      setIsCheckedOut(prevIsCheckedOut);
+      setCheckOutTime(prevCheckOutTime);
     }
   };
 
@@ -260,7 +295,7 @@ export default function EmployeeAttendancePage() {
     return "not-marked";
   };
 
-  const todayDate = mounted && currentTime 
+  const todayDate = mounted && currentTime
     ? currentTime.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : "Loading...";
 
@@ -319,8 +354,8 @@ export default function EmployeeAttendancePage() {
                   </p>
                 </div>
               ) : (
-                <Button 
-                  onClick={handleCheckIn} 
+                <Button
+                  onClick={handleCheckIn}
                   className="w-full bg-green-500 hover:bg-green-600"
                   disabled={isCheckedIn}
                 >
@@ -345,8 +380,8 @@ export default function EmployeeAttendancePage() {
                   </p>
                 </div>
               ) : isCheckedIn ? (
-                <Button 
-                  onClick={handleCheckOut} 
+                <Button
+                  onClick={handleCheckOut}
                   variant="outline"
                   className="w-full border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
                 >
@@ -403,13 +438,12 @@ export default function EmployeeAttendancePage() {
             <CardContent>
               <div className="space-y-3">
                 {monthlyAttendance.map((record, index) => (
-                  <div 
-                    key={index} 
-                    className={`flex items-center justify-between p-4 rounded-lg ${
-                      record.status === "weekend" || record.status === "holiday" 
-                        ? "bg-muted/30" 
-                        : "bg-muted/50"
-                    }`}
+                  <div
+                    key={index}
+                    className={`flex items-center justify-between p-4 rounded-lg ${record.status === "weekend" || record.status === "holiday"
+                      ? "bg-muted/30"
+                      : "bg-muted/50"
+                      }`}
                   >
                     <div className="flex items-center gap-4">
                       <div className="text-center min-w-15">
@@ -439,47 +473,10 @@ export default function EmployeeAttendancePage() {
         </TabsContent>
 
         <TabsContent value="monthly">
-          <Card>
-            <CardHeader>
-              <CardTitle>Monthly Summary - January 2026</CardTitle>
-              <CardDescription>Your attendance overview for this month</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="text-center p-6 bg-green-50 rounded-xl">
-                  <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                  <p className="text-3xl font-bold text-green-600">22</p>
-                  <p className="text-sm text-green-600">Present Days</p>
-                </div>
-                <div className="text-center p-6 bg-red-50 rounded-xl">
-                  <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                  <p className="text-3xl font-bold text-red-600">1</p>
-                  <p className="text-sm text-red-600">Absent Days</p>
-                </div>
-                <div className="text-center p-6 bg-amber-50 rounded-xl">
-                  <AlertCircle className="h-8 w-8 text-amber-500 mx-auto mb-2" />
-                  <p className="text-3xl font-bold text-amber-600">1</p>
-                  <p className="text-sm text-amber-600">Half Days</p>
-                </div>
-                <div className="text-center p-6 bg-blue-50 rounded-xl">
-                  <Calendar className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-                  <p className="text-3xl font-bold text-blue-600">2</p>
-                  <p className="text-sm text-blue-600">Leave Days</p>
-                </div>
-              </div>
-
-              <div className="mt-6 p-4 bg-muted rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium">Total Work Hours</span>
-                  <span className="text-2xl font-bold">176h 30m</span>
-                </div>
-                <div className="flex justify-between items-center mt-2 text-sm text-muted-foreground">
-                  <span>Expected Hours</span>
-                  <span>184h 00m</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <AttendanceCalendar attendanceData={monthlyAttendance.map(record => ({
+            date: record.date,
+            status: record.status.toUpperCase().replace('-', '_')
+          }))} />
         </TabsContent>
       </Tabs>
 
@@ -491,7 +488,7 @@ export default function EmployeeAttendancePage() {
             <div>
               <h4 className="font-medium text-amber-800">Important Notice</h4>
               <p className="text-sm text-amber-700 mt-1">
-                You cannot edit past attendance records. If you have any discrepancies, 
+                You cannot edit past attendance records. If you have any discrepancies,
                 please contact your manager or HR department for corrections.
               </p>
             </div>

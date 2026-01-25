@@ -36,6 +36,8 @@ export function CommandMenu() {
   const { data: session } = useSession();
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith("/admin");
+  const isManager = pathname?.startsWith("/manager");
+  const userRole = (session?.user as any)?.role || "EMPLOYEE";
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -55,29 +57,47 @@ export function CommandMenu() {
   }, []);
 
   const adminNavItems = [
-    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/admin/employees", label: "Employees", icon: Users },
-    { href: "/admin/attendance", label: "Attendance", icon: CalendarCheck },
+    { href: "/admin", label: "Admin Dashboard", icon: LayoutDashboard },
+    { href: "/admin/employees", label: "Manage Employees", icon: Users },
+    { href: "/admin/attendance", label: "All Attendance", icon: CalendarCheck },
     { href: "/admin/leave-requests", label: "Leave Requests", icon: CalendarOff },
-    { href: "/admin/payroll", label: "Payroll", icon: DollarSign },
+    { href: "/admin/payroll", label: "Payroll Management", icon: DollarSign },
+  ];
+
+  const managerNavItems = [
+    { href: "/manager", label: "Manager Dashboard", icon: LayoutDashboard },
+    { href: "/manager/team", label: "My Team", icon: Users },
+    { href: "/manager/attendance", label: "Team Attendance", icon: CalendarCheck },
+    { href: "/manager/profile", label: "My Profile", icon: User },
   ];
 
   const employeeNavItems = [
-    { href: "/employee", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/employee", label: "My Dashboard", icon: LayoutDashboard },
     { href: "/employee/attendance", label: "My Attendance", icon: CalendarCheck },
-    { href: "/employee/leave", label: "Leave", icon: CalendarOff },
+    { href: "/employee/leave", label: "My Leave", icon: CalendarOff },
     { href: "/employee/payroll", label: "My Payroll", icon: DollarSign },
-    { href: "/employee/profile", label: "Profile", icon: User },
+    { href: "/employee/profile", label: "My Profile", icon: User },
   ];
 
-  const navItems = isAdmin ? adminNavItems : employeeNavItems;
+  // Determine which nav items to show based on role
+  const navItems = userRole === "ADMIN"
+    ? adminNavItems
+    : userRole === "MANAGER"
+      ? managerNavItems
+      : employeeNavItems;
+
+  const getPlaceholder = () => {
+    if (userRole === "ADMIN") return "Search employees, attendance, payroll...";
+    if (userRole === "MANAGER") return "Search team, attendance, profile...";
+    return "Search attendance, leave, payroll...";
+  };
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a command or search..." />
+      <CommandInput placeholder={getPlaceholder()} />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
-        
+
         <CommandGroup heading="Navigation">
           {navItems.map((item) => (
             <CommandItem

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { cache } from "@/lib/utils";
+import { revalidateTag } from "next/cache";
+import { getLeavesCached, TAGS } from "@/lib/data";
 
 // GET leave requests
 export async function GET(request: NextRequest) {
@@ -15,44 +17,23 @@ export async function GET(request: NextRequest) {
     const employeeId = searchParams.get("employeeId");
     const status = searchParams.get("status");
 
-    // Build where clause
-    const where: Record<string, unknown> = {};
-    
+    const userRole = session.user.role;
+    const userEmployeeId = session.user.employeeId;
+
+    let queryParams: any = { status };
+
     if (employeeId) {
-      where.employeeId = employeeId;
-    }
-    
-    if (status && status !== "all") {
-      where.status = status.toUpperCase();
+      if (userRole === "EMPLOYEE" && employeeId !== userEmployeeId) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+      }
+      queryParams.employeeId = employeeId;
+    } else {
+      if (userRole === "EMPLOYEE") {
+        queryParams.employeeId = userEmployeeId;
+      }
     }
 
-    // Build cache key based on query parameters
-    const cacheKey = `leave_requests_${employeeId || 'all'}_${status || 'all'}_${session.user.email}`;
-    let leaveRequests = cache.get(cacheKey);
-
-    if (!leaveRequests) {
-      leaveRequests = await prisma.leaveRequest.findMany({
-        where,
-        include: {
-          employee: {
-            select: {
-              id: true,
-              fullName: true,
-              employeeCode: true,
-              department: true,
-              designation: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 50, // Limit results to improve performance
-      });
-
-      // Cache for 2 minutes
-      cache.set(cacheKey, leaveRequests, 120000);
-    }
+    const leaveRequests = await getLeavesCached(queryParams);
 
     return NextResponse.json({ leaveRequests });
   } catch (error) {
@@ -80,18 +61,18 @@ export async function POST(request: NextRequest) {
     // Calculate number of days (inclusive of both start and end dates)
     const start = new Date(startDate);
     const end = new Date(endDate);
-    
+
     // Normalize to start of day (midnight) to avoid timezone issues
     start.setHours(0, 0, 0, 0);
     end.setHours(0, 0, 0, 0);
-    
+
     // Calculate difference in days
     const timeDiff = end.getTime() - start.getTime();
     const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-    
+
     // Add 1 because both start and end dates are inclusive
     const days = daysDiff + 1;
-    
+
     // Validate that days is at least 1
     if (days < 1) {
       return NextResponse.json({ error: "End date must be on or after start date" }, { status: 400 });
@@ -118,10 +99,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Clear cache for leave requests
-    cache.delete(`leave_requests_${employeeId}_all_${session.user.email}`);
-    cache.delete(`leave_requests_all_all_${session.user.email}`);
-    cache.delete(`leave_requests_all_PENDING_${session.user.email}`);
+    // Invalidate cache
+    revalidateTag(TAGS.leaves, "max");
 
     return NextResponse.json(
       { message: "Leave request submitted successfully", leaveRequest },
@@ -181,11 +160,8 @@ export async function PUT(request: NextRequest) {
       },
     });
 
-    // Clear cache for leave requests
-    cache.delete(`leave_requests_${leaveRequest.employeeId}_all_${session.user.email}`);
-    cache.delete(`leave_requests_all_all_${session.user.email}`);
-    cache.delete(`leave_requests_all_${leaveRequest.status}_${session.user.email}`);
-    cache.delete(`leave_requests_all_PENDING_${session.user.email}`);
+    // Invalidate cache
+    revalidateTag(TAGS.leaves, "max");
 
     return NextResponse.json({
       message: `Leave request ${status.toLowerCase()} successfully`,

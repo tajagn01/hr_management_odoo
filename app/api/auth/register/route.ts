@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validators";
 import bcrypt from "bcryptjs";
 import { sendOTPEmail } from "@/lib/email";
+import { logger } from "@/lib/logger";
+import { rateLimit, RateLimitPresets } from "@/lib/rate-limit";
 
 // Generate 6-digit OTP
 function generateOTP(): string {
@@ -10,9 +12,15 @@ function generateOTP(): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResult = rateLimit(request, RateLimitPresets.strict);
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
+
   try {
     const body = await request.json();
-    
+
     // Validate input
     const validationResult = registerSchema.safeParse(body);
     if (!validationResult.success) {
@@ -50,11 +58,11 @@ export async function POST(request: NextRequest) {
         });
 
         // Send OTP email
-        console.log("\n📧 Sending OTP email for existing user...");
+        logger.info("Sending OTP email for existing user", { email });
         const emailResult = await sendOTPEmail(email, otp, name);
-        
+
         if (!emailResult.success) {
-          console.error("❌ Email sending failed:", emailResult.error);
+          logger.error("Email sending failed for existing user", emailResult.error, { email });
           return NextResponse.json(
             { error: emailResult.error || "Failed to send verification email. Please check server console for OTP." },
             { status: 500 }
@@ -110,15 +118,15 @@ export async function POST(request: NextRequest) {
     });
 
     // Send OTP email
-    console.log("\n📧 Sending OTP email for new user...");
+    logger.info("Sending OTP email for new user", { email });
     const emailResult = await sendOTPEmail(email, otp, name);
-    
+
     if (!emailResult.success) {
-      console.error("❌ Email sending failed:", emailResult.error);
+      logger.error("Email sending failed for new user", emailResult.error, { email });
       // Don't delete user - allow them to use OTP from console
       // But show error message
       return NextResponse.json(
-        { 
+        {
           error: emailResult.error || "Failed to send verification email. Please check server console for OTP code.",
           requiresVerification: true,
           email,
@@ -136,11 +144,11 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error: any) {
-    console.error("Registration error:", error);
-    
+    logger.error("Registration error", error);
+
     // Provide more specific error messages
     let errorMessage = "An error occurred during registration. Please try again.";
-    
+
     if (error?.code === "P2002") {
       errorMessage = "Email already exists. Please use a different email or login instead.";
     } else if (error?.message) {
@@ -148,7 +156,7 @@ export async function POST(request: NextRequest) {
     } else if (error?.code) {
       errorMessage = `Database error: ${error.code}`;
     }
-    
+
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }

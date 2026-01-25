@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { logger } from "./logger";
 
 // Email configuration interface
 interface EmailConfig {
@@ -24,16 +25,17 @@ function createTransporter() {
   const SMTP_FROM = process.env.SMTP_FROM;
   const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "DayFlow HRMS";
 
-  console.log("\n📧 Email Configuration Check:");
-  console.log("   SMTP_HOST:", SMTP_HOST || "❌ Not set");
-  console.log("   SMTP_PORT:", SMTP_PORT || "❌ Not set");
-  console.log("   SMTP_USER:", SMTP_USER || "❌ Not set");
-  console.log("   SMTP_PASSWORD:", SMTP_PASSWORD ? "✅ Set" : "❌ Not set");
-  console.log("   SMTP_FROM:", SMTP_FROM || "❌ Not set");
+  logger.debug("Email Configuration Check", {
+    SMTP_HOST: SMTP_HOST || "Not set",
+    SMTP_PORT: SMTP_PORT || "Not set",
+    SMTP_USER: SMTP_USER || "Not set",
+    SMTP_PASSWORD: SMTP_PASSWORD ? "Set" : "Not set",
+    SMTP_FROM: SMTP_FROM || "Not set"
+  });
 
   // If all SMTP config is provided, use it
   if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASSWORD && SMTP_FROM) {
-    console.log("   ✅ Using custom SMTP configuration");
+    logger.info("Using custom SMTP configuration");
     return nodemailer.createTransport({
       host: SMTP_HOST,
       port: parseInt(SMTP_PORT),
@@ -47,7 +49,7 @@ function createTransporter() {
 
   // Option 2: Use Gmail (if only user/password provided)
   if (SMTP_USER && SMTP_PASSWORD && !SMTP_HOST) {
-    console.log("   ✅ Using Gmail SMTP");
+    logger.info("Using Gmail SMTP");
     return nodemailer.createTransport({
       service: "gmail",
       auth: {
@@ -57,7 +59,7 @@ function createTransporter() {
     });
   }
 
-  console.log("   ⚠️ No email service configured - OTP will be in console\n");
+  logger.warn("No email service configured - OTP will be logged to console");
   return null;
 }
 
@@ -71,8 +73,8 @@ export async function sendOTPEmail(
     const transporter = createTransporter();
 
     if (!transporter) {
-      console.log("⚠️ Email service not configured. OTP for", to, ":", otp);
-      console.log("⚠️ ⚠️ ⚠️ USE THIS OTP TO VERIFY:", otp, "⚠️ ⚠️ ⚠️");
+      logger.warn("Email service not configured - OTP logged to console", { to, otp });
+      logger.warn("USE THIS OTP TO VERIFY", { otp });
       return { success: true }; // Allow registration even without email
     }
 
@@ -88,83 +90,96 @@ export async function sendOTPEmail(
       subject: "Verify Your Email - DayFlow HRMS",
       html: `
         <!DOCTYPE html>
-        <html>
+        <html lang="en">
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Verify Your Email</title>
         </head>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">Email Verification</h1>
-          </div>
-          
-          <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-            <p style="font-size: 16px; margin-bottom: 20px;">Hi <strong>${name}</strong>,</p>
-            
-            <p style="font-size: 16px; margin-bottom: 20px;">
-              Thank you for registering with DayFlow HRMS. Please use the following verification code to verify your email address:
-            </p>
-            
-            <div style="background: white; padding: 30px; text-align: center; margin: 30px 0; border-radius: 8px; border: 2px solid #667eea;">
-              <div style="font-size: 36px; font-weight: bold; color: #667eea; letter-spacing: 8px; font-family: 'Courier New', monospace;">
-                ${otp}
-              </div>
-            </div>
-            
-            <p style="font-size: 14px; color: #666; margin-bottom: 10px;">
-              <strong>Important:</strong> This code will expire in <strong>10 minutes</strong>.
-            </p>
-            
-            <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
-              If you didn't create an account, please ignore this email.
-            </p>
-            
-            <div style="border-top: 1px solid #ddd; padding-top: 20px; margin-top: 30px;">
-              <p style="font-size: 12px; color: #999; margin: 0;">
-                Best regards,<br>
-                <strong>DayFlow HRMS Team</strong>
-              </p>
-            </div>
-          </div>
+        <body style="margin: 0; padding: 0; background-color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f9fafb;">
+            <tr>
+              <td align="center" style="padding: 40px 0;">
+                
+                <!-- Main Card -->
+                <table border="0" cellpadding="0" cellspacing="0" width="560" style="background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; max-width: 90%;">
+                  
+                  <!-- Top Border Strip (Brand Color) -->
+                  <tr>
+                    <td height="4" style="background-color: #4f46e5;"></td>
+                  </tr>
+
+                  <!-- Content -->
+                  <tr>
+                    <td style="padding: 40px 48px;">
+                      
+                      <!-- Brand -->
+                      <div style="margin-bottom: 32px;">
+                        <span style="font-size: 20px; font-weight: 700; color: #111827; letter-spacing: -0.5px;">DayFlow HRMS</span>
+                      </div>
+
+                      <!-- Greeting & Message -->
+                      <h1 style="color: #111827; font-size: 24px; font-weight: 600; margin: 0 0 16px 0;">Verify your email address</h1>
+                      
+                      <p style="color: #4b5563; font-size: 16px; line-height: 24px; margin: 0 0 24px 0;">
+                        Hi <strong>${name}</strong>,<br><br>
+                        Thanks for getting started with DayFlow! We need a little more information to complete your registration, including a confirmation of your email address.
+                      </p>
+
+                      <p style="color: #4b5563; font-size: 16px; line-height: 24px; margin: 0 0 24px 0;">
+                        Your verification code is:
+                      </p>
+
+                      <!-- OTP Box -->
+                      <div style="background-color: #f3f4f6; border-radius: 6px; padding: 16px; text-align: center; margin-bottom: 32px;">
+                        <span style="font-family: monospace; font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #111827;">${otp}</span>
+                      </div>
+
+                      <p style="color: #6b7280; font-size: 14px; line-height: 20px; margin: 0;">
+                        This code is valid for 10 minutes. If you didn't request a verification code, you can safely ignore this email.
+                      </p>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="background-color: #f9fafb; padding: 24px 48px; border-top: 1px solid #e5e7eb;">
+                      <p style="color: #9ca3af; font-size: 12px; line-height: 1.5; margin: 0;">
+                        &copy; ${new Date().getFullYear()} DayFlow HRMS.<br>
+                        Sent securely by DayFlow Identity System.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+
+              </td>
+            </tr>
+          </table>
         </body>
         </html>
       `,
       text: `
-        Email Verification - DayFlow HRMS
+        Verify your email address - DayFlow HRMS
         
         Hi ${name},
         
-        Thank you for registering with DayFlow HRMS. Please use the following verification code to verify your email address:
+        Thanks for getting started with DayFlow! We need a little more information to complete your registration, including a confirmation of your email address.
         
-        Verification Code: ${otp}
+        Your verification code is: ${otp}
         
-        This code will expire in 10 minutes.
+        This code is valid for 10 minutes. If you didn't request a verification code, you can safely ignore this email.
         
-        If you didn't create an account, please ignore this email.
-        
-        Best regards,
-        DayFlow HRMS Team
+        © ${new Date().getFullYear()} DayFlow HRMS.
+        Sent securely by DayFlow Identity System.
       `,
     };
 
-    console.log("📤 Attempting to send email to:", to);
+    logger.debug("Attempting to send email", { to });
     const info = await transporter.sendMail(mailOptions);
-    console.log("✅ Email sent successfully to:", to);
-    console.log("   Message ID:", info.messageId);
-    console.log("   Response:", info.response);
+    logger.emailSent(to, mailOptions.subject);
     return { success: true };
   } catch (error: any) {
-    console.error("\n❌ ERROR SENDING EMAIL:");
-    console.error("   To:", to);
-    console.error("   Error Code:", error.code);
-    console.error("   Error Message:", error.message);
-    if (error.response) {
-      console.error("   SMTP Response:", error.response);
-    }
-    if (error.responseCode) {
-      console.error("   Response Code:", error.responseCode);
-    }
-    console.error("");
+    logger.emailFailed(to, error);
     return {
       success: false,
       error: error.message || "Failed to send email",
@@ -186,10 +201,10 @@ export async function testEmailConfig(): Promise<{ success: boolean; error?: str
 
     // Verify connection
     await transporter.verify();
-    console.log("✅ Email server connection verified");
+    logger.info("Email server connection verified");
     return { success: true };
   } catch (error: any) {
-    console.error("❌ Email configuration test failed:", error);
+    logger.error("Email configuration test failed", error);
     return {
       success: false,
       error: error.message || "Failed to connect to email server",

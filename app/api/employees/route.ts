@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { cache } from "@/lib/utils";
+import { revalidateTag } from "next/cache";
+import { getEmployeesCached, getEmployeeByIdCached, TAGS } from "@/lib/data";
 
 // GET employees (all or by email)
 export async function GET(request: NextRequest) {
@@ -16,93 +18,93 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get("id");
     const includePayroll = searchParams.get("includePayroll") === "true";
 
-    // If email is provided, get specific employee
-    if (email) {
-      const user = await prisma.user.findUnique({
-        where: { email },
-        include: {
-          employee: true,
-        },
-      });
+    const user = {
+      role: (session.user as any).role,
+      email: session.user.email,
+      employee: (session.user as any).employeeId ? { id: (session.user as any).employeeId } : null
+    };
 
-      if (!user?.employee) {
-        return NextResponse.json({ error: "Employee not found" }, { status: 404 });
-      }
+    console.log("API/EMPLOYEES GET:", {
+      email: user.email,
+      role: user.role,
+      employeeId: user.employee?.id
+    });
 
-      return NextResponse.json({ employee: user.employee });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // If id is provided, get specific employee
+    // 1. Get specific employee by ID (Cached)
     if (id) {
-      const employee = await prisma.employee.findUnique({
-        where: { id },
-        include: {
-          user: {
-            select: {
-              email: true,
-              role: true,
-            },
-          },
-        },
-      });
-
-      if (!employee) {
-        return NextResponse.json({ error: "Employee not found" }, { status: 404 });
-      }
-
+      const employee = await getEmployeeByIdCached(id);
+      if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
       return NextResponse.json({ employee });
     }
 
-    // Get all employees (admin only)
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email! },
-    });
+    // 2. Get specific employee by Email
+    if (email) {
+      const userEnt = await prisma.user.findUnique({
+        where: { email },
+        include: { employee: true }
+      });
 
-    if (user?.role !== "ADMIN") {
-      return NextResponse.json({ error: "Only admins can view all employees" }, { status: 403 });
+      if (!userEnt || !userEnt.employee) {
+        return NextResponse.json({ error: "Employee profile not found" }, { status: 404 });
+      }
+
+      const employeeData = userEnt.employee;
+      // Manually attach user info that frontend expects
+      (employeeData as any).user = {
+        email: userEnt.email,
+        role: userEnt.role
+      };
+
+      return NextResponse.json({ employee: employeeData });
     }
 
-    // Get all employees (admin only) - with caching and optional payroll data
-    const cacheKey = includePayroll 
-      ? `employees_list_payroll_${session.user.email}`
-      : `employees_list_${session.user.email}`;
-    let employees = cache.get(cacheKey);
-
-    if (!employees) {
+    // 3. Get List (Cached)
+    let employees;
+    if (user.role === "ADMIN") {
+      // Use direct DB call to ensure fresh data for admins (bypassing cache issues)
       employees = await prisma.employee.findMany({
-        include: {
+        select: {
+          id: true,
+          fullName: true,
+          employeeCode: true,
+          designation: true,
+          department: true,
+          phone: true,
+          joiningDate: true,
+          profileImage: true,
           user: {
             select: {
               email: true,
               role: true,
-              isActive: true,
-            },
+              isActive: true
+            }
           },
-          // Include payroll data in a single query to avoid N+1 problem
           ...(includePayroll && {
             payroll: {
               select: {
                 id: true,
                 basicSalary: true,
-                hra: true,
+                netSalary: true,
                 allowances: true,
                 deductions: true,
-                netSalary: true,
-              },
-            },
-          }),
+                hra: true
+              }
+            }
+          })
         },
-        orderBy: {
-          fullName: "asc",
-        },
-        take: 100, // Limit results to prevent slow loading
+        orderBy: { fullName: "asc" },
       });
-
-      // Cache for 5 minutes
-      cache.set(cacheKey, employees, 300000);
+    } else if (user.role === "MANAGER" && user.employee) {
+      employees = await getEmployeesCached(user.employee.id, includePayroll);
+    } else {
+      return NextResponse.json({ error: "Unauthorized to view all employees" }, { status: 403 });
     }
 
-    return NextResponse.json({ employees });
+    return NextResponse.json({ employees, totalCount: employees.length });
   } catch (error) {
     console.error("Error fetching employees:", error);
     return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 });
@@ -159,6 +161,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Invalidate cache
+    revalidateTag(TAGS.employees, "max");
+
     return NextResponse.json(
       { message: "Employee created successfully", employee: user.employee },
       { status: 201 }
@@ -204,6 +209,9 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     });
 
+    // Invalidate cache
+    revalidateTag(TAGS.employees, "max");
+
     return NextResponse.json({ message: "Employee updated successfully", employee });
   } catch (error) {
     console.error("Error updating employee:", error);
@@ -248,6 +256,9 @@ export async function DELETE(request: NextRequest) {
     await prisma.employee.delete({
       where: { id },
     });
+
+    // Invalidate cache
+    revalidateTag(TAGS.employees, "max");
 
     return NextResponse.json({ message: "Employee deleted successfully" });
   } catch (error) {
