@@ -5,7 +5,15 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, KeyRound } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 function LoginContent() {
   const router = useRouter();
@@ -15,6 +23,7 @@ function LoginContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isDemoOpen, setIsDemoOpen] = useState(false);
 
   const registered = searchParams.get("registered");
 
@@ -160,6 +169,81 @@ function LoginContent() {
             </Link>
           </p>
         </div>
+      </div>
+
+      {/* Demo Credentials Button */}
+      <div className="mt-8 text-center animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+        <Dialog open={isDemoOpen} onOpenChange={setIsDemoOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="gap-2 bg-slate-900/50 border-slate-700/50 text-slate-400 hover:text-white hover:bg-slate-800">
+              <KeyRound className="w-4 h-4" />
+              <span>Demo Access</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-slate-950 border-slate-800 text-white sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Demo Credentials</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Click any account below to autofill parameters.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 mt-2">
+              {/* Admin */}
+              <button
+                type="button"
+                onClick={() => { setEmail('admin@dayflow.com'); setPassword('admin123'); setIsDemoOpen(false); }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 hover:bg-blue-950/30 hover:border-blue-500/30 cursor-pointer transition-all group text-left"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-200 group-hover:text-blue-400 transition-colors">Admin</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">Super Admin</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 font-mono">admin@dayflow.com</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-slate-900 px-2 py-1 rounded text-slate-500 font-mono border border-slate-800">admin123</span>
+                </div>
+              </button>
+
+              {/* Manager (Sarah) */}
+              <button
+                type="button"
+                onClick={() => { setEmail('manager@dayflow.com'); setPassword('manager123'); setIsDemoOpen(false); }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 hover:bg-purple-950/30 hover:border-purple-500/30 cursor-pointer transition-all group text-left"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-200 group-hover:text-purple-400 transition-colors">Sarah Manager</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">Manager</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 font-mono">manager@dayflow.com</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-slate-900 px-2 py-1 rounded text-slate-500 font-mono border border-slate-800">manager123</span>
+                </div>
+              </button>
+
+              {/* Employee (John) */}
+              <button
+                type="button"
+                onClick={() => { setEmail('john@dayflow.com'); setPassword('employee123'); setIsDemoOpen(false); }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 hover:bg-emerald-950/30 hover:border-emerald-500/30 cursor-pointer transition-all group text-left"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-slate-200 group-hover:text-emerald-400 transition-colors">John Doe</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">Employee</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1 font-mono">john@dayflow.com</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-slate-900 px-2 py-1 rounded text-slate-500 font-mono border border-slate-800">employee123</span>
+                </div>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

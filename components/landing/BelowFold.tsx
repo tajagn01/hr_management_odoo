@@ -344,7 +344,7 @@ export default function BelowFold() {
                                             ))}
                                         </div>
 
-                                        <Link href="/register" className="block mt-auto">
+                                        <Link href="/login" className="block mt-auto">
                                             <Button
                                                 size="lg"
                                                 variant={plan.highlighted ? "default" : "outline"}
@@ -409,13 +409,13 @@ export default function BelowFold() {
                         </p>
 
                         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                            <Link href="/register">
+                            <Link href="/login">
                                 <motion.div
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
                                 >
                                     <Button size="lg" className="w-full sm:w-auto h-14 px-10 text-lg font-semibold bg-white hover:bg-slate-50 text-blue-600 shadow-2xl group">
-                                        Start Free Trial
+                                        Start Free Demo
                                         <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                                     </Button>
                                 </motion.div>

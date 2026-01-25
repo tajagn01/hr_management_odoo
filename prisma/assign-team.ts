@@ -2,53 +2,59 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-async function assignTeamToManager() {
-    console.log("👥 Assigning all employees to manager...");
+async function assignTeam() {
+    console.log("🔧 Assigning team members to Sarah Manager...");
 
     try {
-        // Find the manager employee
-        const manager = await prisma.employee.findFirst({
-            where: { employeeCode: "MGR001" },
+        // 1. Find manager user
+        const managerUser = await prisma.user.findUnique({
+            where: { email: "manager@dayflow.com" },
         });
 
-        if (!manager) {
-            console.error("❌ Manager not found! Please run add-manager.ts first.");
+        if (!managerUser) {
+            console.error("❌ Manager user not found! Please run 'add-manager.ts' first.");
             return;
         }
 
-        console.log(`✅ Found manager: ${manager.fullName}`);
+        // 2. Find manager employee profile
+        const managerEmployee = await prisma.employee.findFirst({
+            where: { userId: managerUser.id },
+        });
 
-        // Get all employees except the manager
-        const allEmployees = await prisma.employee.findMany({
+        if (!managerEmployee) {
+            console.error("❌ Manager employee profile not found!");
+            return;
+        }
+
+        console.log(`✅ Found Manager: ${managerEmployee.fullName} (${managerEmployee.id})`);
+
+        // 3. Find all potential team members (everyone except the manager)
+        // We exclude the manager themselves
+        const teamMembers = await prisma.employee.findMany({
             where: {
-                employeeCode: {
-                    not: "MGR001", // Exclude the manager themselves
-                },
+                id: { not: managerEmployee.id }
+            }
+        });
+
+        console.log(`👥 Found ${teamMembers.length} employees to assign.`);
+
+        // 4. Update them
+        const result = await prisma.employee.updateMany({
+            where: {
+                id: { in: teamMembers.map(e => e.id) }
             },
+            data: {
+                managerId: managerEmployee.id
+            }
         });
 
-        console.log(`📋 Found ${allEmployees.length} employees to assign`);
+        console.log(`✅ Successfully assigned ${result.count} employees to Sarah Manager's team.`);
 
-        // Update all employees to be managed by this manager
-        const updatePromises = allEmployees.map((emp) =>
-            prisma.employee.update({
-                where: { id: emp.id },
-                // @ts-ignore
-                data: { managerId: manager.id },
-            })
-        );
-
-        await Promise.all(updatePromises);
-
-        console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        console.log("✅ Successfully assigned all employees to manager!");
-        console.log("\n👔 Manager: Sarah Manager (manager@dayflow.com)");
-        console.log("\n👥 Team Members:");
-        allEmployees.forEach((emp, index) => {
-            console.log(`  ${index + 1}. ${emp.fullName} (${emp.employeeCode}) - ${emp.designation}`);
+        // Log names for verification
+        teamMembers.forEach(emp => {
+            console.log(`   - Assigned: ${emp.fullName} (${emp.designation})`);
         });
-        console.log(`\n📊 Total Team Size: ${allEmployees.length} employees`);
-        console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
     } catch (error: any) {
         console.error("❌ Error:", error.message);
     } finally {
@@ -56,4 +62,4 @@ async function assignTeamToManager() {
     }
 }
 
-assignTeamToManager();
+assignTeam();

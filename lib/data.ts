@@ -153,7 +153,7 @@ export const getEmployeesCached = unstable_cache(
         return employees;
     },
     ["employees-list"],
-    { tags: [TAGS.employees], revalidate: 3600 }
+    { tags: [TAGS.employees], revalidate: 1 }
 );
 
 export const getEmployeeByIdCached = unstable_cache(

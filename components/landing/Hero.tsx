@@ -188,12 +188,12 @@ export default function Hero() {
                             whileTap={{ scale: 0.95 }}
                             className="w-full sm:w-auto"
                         >
-                            <Link href="/register" className="block w-full sm:w-auto">
+                            <Link href="/login" className="block w-full sm:w-auto">
                                 <Button
                                     size="lg"
                                     className="w-full sm:w-auto h-12 sm:h-12 px-8 text-base sm:text-lg font-semibold bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 shadow-[0_10px_40px_-10px_rgba(59,130,246,0.5)] hover:shadow-[0_20px_40px_-10px_rgba(59,130,246,0.6)] transition-all duration-200"
                                 >
-                                    Start free trial
+                                    Start Free Demo
                                     <ArrowRight className="w-5 h-5 ml-2" />
                                 </Button>
                             </Link>

@@ -13,6 +13,7 @@ export async function PATCH(request: Request) {
         }
 
         const body = await request.json();
+        console.log("Received complete-profile body:", body);
         const { fullName, dateOfBirth, phone, address, joiningDate, department, designation } = body;
 
         // Validate required fields
