@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
         const startDate = new Date(startDateStr);
         const endDate = new Date(endDateStr);
 
-        const results = [];
+        const results: { employeeId: string; date: string; status: string }[] = [];
 
         // Performance note: In a real production system with thousands of employees, 
         // we would optimize this to fetch all data in bulk queries rather than loop.
