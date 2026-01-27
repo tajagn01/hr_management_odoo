@@ -42,8 +42,8 @@ function LoginContent() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        router.push("/admin");
-        router.refresh();
+        // Let middleware handle role-based redirect
+        window.location.href = "/";
       }
     } catch (error) {
       setError("An error occurred. Please try again.");
