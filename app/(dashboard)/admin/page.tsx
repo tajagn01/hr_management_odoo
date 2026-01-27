@@ -51,16 +51,14 @@ export default function AdminPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Use UTC day boundaries to avoid local timezone mismatches between client and server
   const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
+    const now = new Date();
+    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   }, []);
 
   const tomorrow = useMemo(() => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + 1);
-    return d;
+    return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1));
   }, [today]);
 
   // 1. Fetch Employees
@@ -97,8 +95,90 @@ export default function AdminPage() {
     staleTime: Infinity,
   });
 
+  // 3b. Fetch Recent Leave Requests (Last 5, newest first, from last 2 days)
+  const { data: recentLeaveData } = useQuery({
+    queryKey: ['leave-requests', 'recent'],
+    queryFn: async () => {
+      console.log("🔄 [ADMIN] Fetching recent leave requests...");
+      const res = await fetch("/api/leave?recentDays=2&limit=5");
+      const data = await res.json();
+      console.log("✅ [ADMIN] Recent leave data received:", data);
+      return data;
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 0, // Always fetch fresh data
+  });
+
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Listen for leave events from realtime and refresh leave queries
+  useEffect(() => {
+    const onLeaveCreated = (e: any) => {
+      console.log("🔔 admin: leave:created event received", e?.detail);
+      const detail = e?.detail;
+
+      // Optimistically insert the new leave into the cached leave list so UI updates immediately
+      try {
+        queryClient.setQueryData(['leave-requests', 'all'], (old: any) => {
+          const existing = old?.leaveRequests || [];
+          const newLeave = {
+            id: detail.leaveRequestId || detail.id || `tmp-${Date.now()}`,
+            type: detail.type || detail.leaveType || "OTHER",
+            startDate: detail.startDate || detail.start || new Date().toISOString(),
+            endDate: detail.endDate || detail.end || new Date().toISOString(),
+            days: detail.days || 1,
+            status: detail.status || "PENDING",
+            reason: detail.reason || null,
+            createdAt: detail.timestamp || new Date().toISOString(),
+            employee: { fullName: detail.employeeName || "Unknown" },
+          };
+
+          return { ...old, leaveRequests: [newLeave, ...existing] };
+        });
+      } catch (err) {
+        console.error("Failed to optimistic-insert leave into cache:", err);
+      }
+
+      // Also trigger an invalidation/refetch to ensure canonical data arrives
+      queryClient.invalidateQueries({ queryKey: ['leave-requests', 'all'] });
+      queryClient.refetchQueries({ queryKey: ['leave-requests', 'all'] });
+    };
+
+    const onLeaveStatusChange = (e: any) => {
+      console.log("🔔 admin: leave status event received", e?.detail);
+      const detail = e?.detail;
+      if (!detail?.leaveRequestId) return;
+
+      try {
+        queryClient.setQueryData(['leave-requests', 'all'], (old: any) => {
+          const existing = old?.leaveRequests || [];
+          const updated = existing.map((lr: any) => {
+            if (lr.id === detail.leaveRequestId || lr.id === detail.id) {
+              return { ...lr, status: detail.status || lr.status };
+            }
+            return lr;
+          });
+          return { ...old, leaveRequests: updated };
+        });
+      } catch (err) {
+        console.error("Failed to update leave status in cache:", err);
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['leave-requests', 'all'] });
+      queryClient.refetchQueries({ queryKey: ['leave-requests', 'all'] });
+    };
+
+    window.addEventListener('leave:created', onLeaveCreated as EventListener);
+    window.addEventListener('leave:approved', onLeaveStatusChange as EventListener);
+    window.addEventListener('leave:rejected', onLeaveStatusChange as EventListener);
+
+    return () => {
+      window.removeEventListener('leave:created', onLeaveCreated as EventListener);
+      window.removeEventListener('leave:approved', onLeaveStatusChange as EventListener);
+      window.removeEventListener('leave:rejected', onLeaveStatusChange as EventListener);
+    };
+  }, [queryClient]);
 
   // Combine isFetching from all queries
   const isGlobalFetching = useQueryClient().isFetching() > 0;
@@ -113,6 +193,7 @@ export default function AdminPage() {
       // Refetch all attendance queries (dashboard stats, yearly chart, etc.)
       queryClient.refetchQueries({ queryKey: ['attendance'] }),
       queryClient.refetchQueries({ queryKey: ['leave-requests', 'all'] }),
+      queryClient.refetchQueries({ queryKey: ['leave-requests', 'recent'] }), // Added: Refetch recent leaves
       queryClient.invalidateQueries({ queryKey: ['attendance-stats'] }),
       minDelay
     ]);
@@ -122,14 +203,15 @@ export default function AdminPage() {
   // Memoize all derived calculations
   const stats = useMemo(() => {
     const allEmployees = employeesData?.employees || [];
-    const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
-    const totalEmployees = regularEmployees.length;
+    // FIXED: Count ALL employees, not just role=EMPLOYEE
+    // ADMIN and MANAGER users can also check in/out and should be counted
+    const totalEmployees = allEmployees.length;
 
-    const monthlyPayroll = regularEmployees.reduce((sum: number, emp: any) => {
+    const monthlyPayroll = allEmployees.reduce((sum: number, emp: any) => {
       return sum + (emp.payroll?.netSalary || 0);
     }, 0);
 
-    const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
+    const allEmployeeIds = new Set(allEmployees.map((e: any) => e.id));
 
     // 1. Calculate Present & Late
     let presentCount = 0;
@@ -138,7 +220,7 @@ export default function AdminPage() {
     const LATE_THRESHOLD_MINUTE = 30;
 
     const presentRecords = attendanceData?.attendanceRecords?.filter((a: any) => {
-      if (!regularEmployeeIds.has(a.employeeId)) return false;
+      if (!allEmployeeIds.has(a.employeeId)) return false;
       const status = a.status?.toUpperCase();
       const isPresent = status === "PRESENT" || status === "HALF_DAY" || (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE" && status !== "LEAVE");
 
@@ -158,9 +240,8 @@ export default function AdminPage() {
     }) || [];
 
     // 2. Calculate On Leave (Approved leaves for today)
-    // Note: API should ideally return only active leaves for today, but we filter client side to be safe if full list returned
     const onLeaveCount = leaveData?.leaveRequests?.filter((lr: any) => {
-      if (!regularEmployeeIds.has(lr.employeeId)) return false;
+      if (!allEmployeeIds.has(lr.employeeId)) return false;
       if (lr.status !== "APPROVED") return false;
 
       const start = new Date(lr.startDate);
@@ -182,15 +263,11 @@ export default function AdminPage() {
 
     const allLeaves = leaveData?.leaveRequests || [];
     const pendingLeaves = allLeaves.filter((lr: any) =>
-      lr.status === "PENDING" && regularEmployeeIds.has(lr.employeeId)
+      lr.status === "PENDING" && allEmployeeIds.has(lr.employeeId)
     ).length;
 
-    // Combine with realtime stats if available (Realtime usually just sends "presentToday", we might stick to derived for consistency unless realtime is smarter)
-    // For this strict requirement, let's stick to the derived "presentCount" from the fresh attendance list to ensure "Late" logic consistency,
-    // unless attendanceStats is fully populated.
+    // Combine with realtime stats if available
     const displayPresent = attendanceStats.presentToday > 0 ? attendanceStats.presentToday : presentCount;
-    // If realtime updates present, we might need to recalculate absent. 
-    // For safety in this iteration, we rely on the derived logic from `attendanceData` which is refetched on refresh/interval.
 
     return {
       totalEmployees,
@@ -205,16 +282,29 @@ export default function AdminPage() {
 
 
   const recentLeaveRequestsList = useMemo(() => {
-    const allLeaves = leaveData?.leaveRequests || [];
-    const allEmployees = employeesData?.employees || [];
-    const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
-    const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
+    console.log("🧮 [ADMIN] Calculating recentLeaveRequestsList...");
+    const allLeaves = recentLeaveData?.leaveRequests || leaveData?.leaveRequests || [];
+    console.log("📝 [ADMIN] All leaves before filtering:", allLeaves.length, allLeaves);
 
-    return allLeaves
-      .filter((lr: any) => regularEmployeeIds.has(lr.employeeId))
+    // Log employeeId values to debug
+    if (allLeaves.length > 0) {
+      console.log("🆔 [ADMIN] Leave request employeeIds:", allLeaves.map((lr: any) => lr.employeeId));
+    }
+
+    // REMOVED: Employee role filter - All users can submit leave requests regardless of role
+    // The previous filter was excluding leave requests from ADMIN/MANAGER users
+    // const allEmployees = employeesData?.employees || [];
+    // const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
+    // const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
+
+    // Simply sort and limit the results
+    const result = allLeaves
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 10);
-  }, [leaveData, employeesData]);
+      .slice(0, 5);
+    console.log("✨ [ADMIN] Final recentLeaveRequestsList:", result.length, result);
+
+    return result;
+  }, [recentLeaveData, leaveData]); // Removed employeesData dependency since we're not filtering by it
 
   const formatCurrency = (amount: number) => {
     if (amount >= 10000000) {
@@ -399,7 +489,7 @@ export default function AdminPage() {
                 <p className="text-sm text-muted-foreground">All caught up!</p>
               </div>
             ) : (
-              recentLeaveRequestsList.slice(0, 3).map((request: any) => (
+              recentLeaveRequestsList.slice(0, 5).map((request: any) => (
                 <div key={request.id} className="bg-card rounded-xl border shadow-sm overflow-hidden relative flex">
                   <div className={`w-1.5 ${request.status === 'APPROVED' ? 'bg-green-500' :
                     request.status === 'REJECTED' ? 'bg-red-500' : 'bg-amber-400'
@@ -525,7 +615,7 @@ export default function AdminPage() {
                     <CardTitle>Recent Leave Requests</CardTitle>
                     <CardDescription>Latest employee leave applications</CardDescription>
                   </div>
-                  <Badge variant="secondary">{recentLeaveRequestsList.filter((r: any) => r.status === "pending").length} Pending</Badge>
+                  <Badge variant="secondary">{recentLeaveRequestsList.filter((r: any) => r.status === "PENDING").length} Pending</Badge>
                 </div>
               </CardHeader>
               <CardContent>

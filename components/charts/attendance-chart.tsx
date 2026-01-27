@@ -1,93 +1,108 @@
 "use client";
 
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
-interface ChartData {
-  month: string;
-  attendance: number;
-  leaves: number;
-}
-
-// @ts-nocheck
-import { useQuery } from "@tanstack/react-query";
-
+// New: Attendance trends (Daily) — recreated from scratch
 export function AttendanceChart() {
-  const { data: chartData = [], isLoading: loading } = useQuery({
-    queryKey: ['attendance', 'yearly-chart', new Date().getFullYear()],
-    queryFn: async () => {
-      const currentYear = new Date().getFullYear();
-      const response = await fetch(`/api/attendance/yearly?year=${currentYear}`);
-      if (!response.ok) throw new Error("Failed");
-      const data = await response.json();
-      return data.chartData || [];
-    },
-    staleTime: Infinity,
-  });
+  // Default to January 2026 as requested
+  const DEFAULT_YEAR = 2026;
+  const DEFAULT_MONTH = 1; // January
+
+  const [year] = useState<number>(DEFAULT_YEAR);
+  const [month] = useState<number>(DEFAULT_MONTH);
+  const [loading, setLoading] = useState(true);
+  const [rawRecords, setRawRecords] = useState<any[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchMonthly = async () => {
+      try {
+        const res = await fetch(`/api/attendance/monthly?year=${year}&month=${month}`);
+        if (!res.ok) throw new Error("Failed to fetch monthly attendance");
+        const json = await res.json();
+        if (mounted) setRawRecords(json.monthlyRecords || []);
+      } catch (err) {
+        console.error(err);
+        if (mounted) setRawRecords([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    fetchMonthly();
+    return () => { mounted = false; };
+  }, [year, month]);
+
+  // Build a stable list of days for January 2026 (1..31)
+  const daysInMonth = 31; // Jan always 31
+  const baselineDays = useMemo(() => {
+    return Array.from({ length: daysInMonth }, (_, i) => ({
+      day: (i + 1).toString(),
+      attendance: 0,
+    }));
+  }, []);
+
+  // Aggregate present counts per day and convert to percentage
+  const data = useMemo(() => {
+    if (!rawRecords || rawRecords.length === 0) return baselineDays;
+
+    // Count employees from records; fall back to 1 to avoid division by zero
+    const employeeCount = rawRecords.length || 1;
+
+    // Initialize counters for each day
+    const counts = new Array(daysInMonth).fill(0);
+
+    // rawRecords expected to contain per-employee dayWiseData array with { date, status }
+    rawRecords.forEach((rec: any) => {
+      const dayWise = rec.dayWiseData || [];
+      if (!Array.isArray(dayWise)) return;
+      dayWise.forEach((dw: any) => {
+        if (!dw || !dw.date) return;
+        const parts = dw.date.split("-");
+        const d = parseInt(parts[2], 10);
+        if (!isNaN(d) && d >= 1 && d <= daysInMonth) {
+          const status = (dw.status || '').toString().toUpperCase();
+          if (status === 'PRESENT' || status === 'P' || status === 'CHECKED_IN') {
+            counts[d - 1] += 1;
+          }
+        }
+      });
+    });
+
+    // Convert to percentage, clamp between 0 and 100
+    return counts.map((c, idx) => {
+      const pct = Math.round((c / employeeCount) * 100);
+      return {
+        day: (idx + 1).toString(),
+        attendance: Math.max(0, Math.min(100, pct)),
+      };
+    });
+  }, [rawRecords, baselineDays]);
 
   if (loading) {
     return (
-      <div className="w-full h-[300px] flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading attendance data...</p>
+      <div className="w-full h-80 flex items-center justify-center">
+        <p className="text-muted-foreground text-sm">Loading attendance trends...</p>
       </div>
     );
   }
 
-  if (chartData.length === 0) {
-    return (
-      <div className="w-full h-[300px] flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">No attendance data available</p>
-      </div>
-    );
-  }
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <AreaChart data={chartData}>
-        <defs>
-          <linearGradient id="colorAttendance" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id="colorLeaves" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8} />
-            <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-        <XAxis dataKey="month" className="text-xs" />
-        <YAxis className="text-xs" />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: "hsl(var(--background))",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "8px",
-          }}
-        />
-        <Area
-          type="monotone"
-          dataKey="attendance"
-          stroke="#3b82f6"
-          fillOpacity={1}
-          fill="url(#colorAttendance)"
-          name="Attendance %"
-        />
-        <Area
-          type="monotone"
-          dataKey="leaves"
-          stroke="#ef4444"
-          fillOpacity={1}
-          fill="url(#colorLeaves)"
-          name="Leaves %"
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div className="w-full h-80">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 6 }}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+          <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+          <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+          <Tooltip
+            formatter={(value: any) => `${value}%`}
+            contentStyle={{ backgroundColor: 'transparent', border: 'none', boxShadow: 'none' }}
+            wrapperStyle={{ pointerEvents: 'none' }}
+          />
+          <Bar dataKey="attendance" fill="#3b82f6" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }

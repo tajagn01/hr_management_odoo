@@ -6,6 +6,7 @@ import { revalidateTag } from "next/cache";
 import { getLeavesCached, TAGS } from "@/lib/data";
 import { notifyAdmins } from "@/lib/notifications";
 import { createNotification } from "@/lib/notifications";
+import { emitLeaveRequestCreated, emitLeaveRequestStatusChange } from "@/lib/realtime-emitter";
 
 // GET leave requests
 export async function GET(request: NextRequest) {
@@ -18,11 +19,21 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const employeeId = searchParams.get("employeeId");
     const status = searchParams.get("status");
+    const recentDaysParam = searchParams.get("recentDays");
+    const recentDays = recentDaysParam ? parseInt(recentDaysParam, 10) : undefined;
+    const limitParam = searchParams.get("limit") || searchParams.get("take");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
     const userRole = session.user.role;
     const userEmployeeId = session.user.employeeId;
 
-    let queryParams: any = { status };
+    let queryParams: any = {};
+    if (status && status !== 'all') {
+      const s = status.toUpperCase();
+      if (["PENDING", "APPROVED", "REJECTED"].includes(s)) queryParams.status = s;
+    }
+    if (recentDays && !isNaN(recentDays)) queryParams.recentDays = recentDays;
+    if (limit && !isNaN(limit)) queryParams.take = limit;
 
     if (employeeId) {
       if (userRole === "EMPLOYEE" && employeeId !== userEmployeeId) {
@@ -35,7 +46,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    console.log("🔍 [LEAVE API] Query params:", queryParams);
     const leaveRequests = await getLeavesCached(queryParams);
+    console.log("📊 [LEAVE API] Found", leaveRequests.length, "leave requests");
+    console.log("📋 [LEAVE API] Leave requests:", JSON.stringify(leaveRequests.map((lr: any) => ({
+      id: lr.id,
+      employeeId: lr.employeeId,
+      status: lr.status,
+      createdAt: lr.createdAt,
+      employee: lr.employee?.fullName
+    })), null, 2));
 
     return NextResponse.json({ leaveRequests });
   } catch (error) {
@@ -117,6 +137,22 @@ export async function POST(request: NextRequest) {
           type: leaveRequest.type,
           days: leaveRequest.days,
         },
+      });
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+      // Don't fail the request if notification fails
+    }
+
+    // Emit realtime event for admins and the employee
+    try {
+      emitLeaveRequestCreated({
+        leaveRequestId: leaveRequest.id,
+        employeeId: leaveRequest.employeeId,
+        employeeName: leaveRequest.employee.fullName,
+        type: leaveRequest.type,
+        days: leaveRequest.days,
+        status: leaveRequest.status,
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       console.error("Failed to send notification:", error);
@@ -208,6 +244,21 @@ export async function PUT(request: NextRequest) {
     } catch (error) {
       console.error("Failed to send notification:", error);
       // Don't fail the request if notification fails
+    }
+
+    // Emit realtime leave status change event
+    try {
+      emitLeaveRequestStatusChange({
+        leaveRequestId: leaveRequest.id,
+        employeeId: leaveRequest.employeeId,
+        employeeName: leaveRequest.employee.fullName,
+        type: leaveRequest.type,
+        days: leaveRequest.days,
+        status: leaveRequest.status,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Failed to emit leave status change:", error);
     }
 
     return NextResponse.json({

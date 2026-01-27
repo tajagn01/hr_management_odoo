@@ -161,6 +161,17 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       }));
     });
 
+    // Forward leave events to window so UI can react (e.g., refresh lists)
+    newSocket.on("leave:created", (data: any) => {
+      console.log("📥 Received leave:created", data);
+      window.dispatchEvent(new CustomEvent("leave:created", { detail: data }));
+    });
+
+    newSocket.on("leave:approved", (data: any) => {
+      console.log("📥 Received leave:approved", data);
+      window.dispatchEvent(new CustomEvent("leave:approved", { detail: data }));
+    });
+
     newSocket.on("notification:employee", (data: any) => {
       console.log("📥 Received employee notification", data);
       // Dispatch with EMPLOYEE role so only employee pages show it

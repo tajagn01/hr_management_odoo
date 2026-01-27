@@ -89,6 +89,7 @@ const getLeaveTypeDisplayText = (type: string, balance: { paid: { remaining: num
 
 export default function EmployeeLeavePage() {
   const { data: session } = useSession();
+  const [mounted, setMounted] = useState(false);
   const [leaveType, setLeaveType] = useState("PAID");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -196,6 +197,8 @@ export default function EmployeeLeavePage() {
       }
     };
     loadData();
+    // mark mounted for client-only UI to avoid hydration mismatches
+    setMounted(true);
   }, [fetchEmployee, fetchLeaveRequests]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -339,33 +342,37 @@ export default function EmployeeLeavePage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="leave-type" className="text-sm font-medium">Leave Type</label>
-                <Select value={leaveType} onValueChange={setLeaveType}>
-                  <SelectTrigger id="leave-type" className="w-full bg-background text-foreground border-input hover:bg-accent">
-                    <SelectValue placeholder="Select leave type">
-                      {getLeaveTypeDisplayText(leaveType, calculatedBalance)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover text-popover-foreground border-border">
-                    <SelectItem 
-                      value="PAID" 
-                      className="cursor-pointer hover:bg-accent focus:bg-accent focus:text-accent-foreground"
-                    >
-                      Paid Leave ({calculatedBalance.paid.remaining} days remaining)
-                    </SelectItem>
-                    <SelectItem 
-                      value="SICK" 
-                      className="cursor-pointer hover:bg-accent focus:bg-accent focus:text-accent-foreground"
-                    >
-                      Sick Leave ({calculatedBalance.sick.remaining} days remaining)
-                    </SelectItem>
-                    <SelectItem 
-                      value="UNPAID" 
-                      className="cursor-pointer hover:bg-accent focus:bg-accent focus:text-accent-foreground"
-                    >
-                      Unpaid Leave ({calculatedBalance.unpaid.remaining} days remaining)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                {mounted ? (
+                  <Select value={leaveType} onValueChange={setLeaveType}>
+                    <SelectTrigger id="leave-type" className="w-full bg-background text-foreground border-input hover:bg-accent">
+                      <SelectValue placeholder="Select leave type">
+                        {getLeaveTypeDisplayText(leaveType, calculatedBalance)}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover text-popover-foreground border-border">
+                      <SelectItem 
+                        value="PAID" 
+                        className="cursor-pointer hover:bg-accent focus:bg-accent focus:text-accent-foreground"
+                      >
+                        Paid Leave ({calculatedBalance.paid.remaining} days remaining)
+                      </SelectItem>
+                      <SelectItem 
+                        value="SICK" 
+                        className="cursor-pointer hover:bg-accent focus:bg-accent focus:text-accent-foreground"
+                      >
+                        Sick Leave ({calculatedBalance.sick.remaining} days remaining)
+                      </SelectItem>
+                      <SelectItem 
+                        value="UNPAID" 
+                        className="cursor-pointer hover:bg-accent focus:bg-accent focus:text-accent-foreground"
+                      >
+                        Unpaid Leave ({calculatedBalance.unpaid.remaining} days remaining)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="h-10 flex items-center px-3 rounded-md border border-input bg-background text-sm text-muted-foreground">{getLeaveTypeDisplayText(leaveType, calculatedBalance)}</div>
+                )}
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">

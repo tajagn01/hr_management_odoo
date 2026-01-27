@@ -93,8 +93,8 @@ export default function AdminLeaveRequestsPage() {
   const fetchLeaveRequests = useCallback(async () => {
     setIsLoading(true);
     try {
-      const url = filter === "all" ? "/api/leave" : `/api/leave?status=${filter}`;
-      const res = await fetch(url);
+      // Fetch ALL requests from the last 2 days (pending, approved, rejected)
+      const res = await fetch(`/api/leave?recentDays=2`);
       const data = await res.json();
       if (data.leaveRequests) {
         setLeaveRequests(data.leaveRequests);
@@ -104,7 +104,7 @@ export default function AdminLeaveRequestsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [filter]);
+  }, []);
 
   useEffect(() => {
     fetchLeaveRequests();
@@ -259,10 +259,12 @@ export default function AdminLeaveRequestsPage() {
         </div>
       </div>
 
-      {/* Leave Requests List */}
+
+
+      {/* All Leave Requests */}
       <Card>
         <CardHeader>
-          <CardTitle>Leave Applications</CardTitle>
+          <CardTitle>All Leave Requests</CardTitle>
           <CardDescription>
             {filter === "all" ? "All leave requests" : `Showing ${filter} requests`}
           </CardDescription>
@@ -280,17 +282,13 @@ export default function AdminLeaveRequestsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Mobile Ticket View - Premium Redesign */}
+              {/* Mobile and desktop views reuse the existing mapping */}
               <div className="md:hidden space-y-4">
                 {leaveRequests.map((request) => (
                   <div key={`mobile-${request.id}`} className="bg-card rounded-xl border shadow-sm overflow-hidden relative">
-                    {/* Left colored accent based on status */}
-                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${request.status.toLowerCase() === 'approved' ? 'bg-green-500' :
-                      request.status.toLowerCase() === 'rejected' ? 'bg-red-500' : 'bg-amber-400'
-                      }`} />
+                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${request.status.toLowerCase() === 'approved' ? 'bg-green-500' : request.status.toLowerCase() === 'rejected' ? 'bg-red-500' : 'bg-amber-400'}`} />
 
                     <div className="p-4 pl-5">
-                      {/* Header: Date & Status */}
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex flex-col">
                           <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Start Date</span>
@@ -307,7 +305,6 @@ export default function AdminLeaveRequestsPage() {
                         </div>
                       </div>
 
-                      {/* Employee & Content */}
                       <div className="bg-muted/30 rounded-lg p-3 mb-3">
                         <div className="flex items-center gap-3 mb-2">
                           <Avatar className="h-8 w-8 border border-background">
@@ -333,7 +330,6 @@ export default function AdminLeaveRequestsPage() {
                         )}
                       </div>
 
-                      {/* Actions */}
                       {request.status.toLowerCase() === "pending" && (
                         <div className="grid grid-cols-2 gap-3 pt-1">
                           <Button
@@ -356,18 +352,13 @@ export default function AdminLeaveRequestsPage() {
                 ))}
               </div>
 
-              {/* Desktop View (Hidden on Mobile) */}
               <div className="hidden md:block space-y-4">
                 {leaveRequests.map((request) => (
                   <div
                     key={request.id}
-                    className={`p-4 border rounded-lg ${request.status.toLowerCase() === "pending"
-                      ? "border-amber-200 bg-amber-50/50"
-                      : ""
-                      }`}
+                    className={`p-4 border rounded-lg ${request.status.toLowerCase() === "pending" ? "border-amber-200 bg-amber-50/50" : ""}`}
                   >
                     <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                      {/* Employee Info */}
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-3">
                           <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
@@ -412,39 +403,25 @@ export default function AdminLeaveRequestsPage() {
                         )}
 
                         {request.adminComment && (
-                          <div className={`mt-3 p-3 rounded-lg flex items-start gap-2 ${request.status.toLowerCase() === "approved" ? "bg-green-100 dark:bg-green-950" : "bg-red-100 dark:bg-red-950"
-                            }`}>
-                            <MessageSquare className={`h-4 w-4 mt-0.5 ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
-                              }`} />
+                          <div className={`mt-3 p-3 rounded-lg flex items-start gap-2 ${request.status.toLowerCase() === "approved" ? "bg-green-100 dark:bg-green-950" : "bg-red-100 dark:bg-red-950"}`}>
+                            <MessageSquare className={`h-4 w-4 mt-0.5 ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"}`} />
                             <div>
-                              <p className={`text-xs font-medium ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"
-                                }`}>Admin Comment</p>
-                              <p className={`text-sm ${request.status.toLowerCase() === "approved" ? "text-green-700" : "text-red-700"
-                                }`}>{request.adminComment}</p>
+                              <p className={`text-xs font-medium ${request.status.toLowerCase() === "approved" ? "text-green-600" : "text-red-600"}`}>Admin Comment</p>
+                              <p className={`text-sm ${request.status.toLowerCase() === "approved" ? "text-green-700" : "text-red-700"}`}>{request.adminComment}</p>
                             </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Actions */}
                       <div className="flex flex-col gap-2 lg:min-w-40">
-                        <p className="text-xs text-muted-foreground text-right">
-                          Applied: {new Date(request.createdAt).toLocaleDateString()}
-                        </p>
+                        <p className="text-xs text-muted-foreground text-right">Applied: {new Date(request.createdAt).toLocaleDateString()}</p>
                         {request.status.toLowerCase() === "pending" && (
                           <div className="flex gap-2 lg:flex-col">
-                            <Button
-                              className="flex-1 bg-green-600 hover:bg-green-700"
-                              onClick={() => handleAction(request, "approve")}
-                            >
+                            <Button className="flex-1 bg-green-600 hover:bg-green-700" onClick={() => handleAction(request, "approve")}>
                               <CheckCircle2 className="h-4 w-4 mr-2" />
                               Approve
                             </Button>
-                            <Button
-                              variant="destructive"
-                              className="flex-1"
-                              onClick={() => handleAction(request, "reject")}
-                            >
+                            <Button variant="destructive" className="flex-1" onClick={() => handleAction(request, "reject")}>
                               <XCircle className="h-4 w-4 mr-2" />
                               Reject
                             </Button>

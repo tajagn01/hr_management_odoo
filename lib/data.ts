@@ -50,7 +50,10 @@ export const leaveSelect = {
     endDate: true,
     days: true,
     status: true,
-    reason: true
+    reason: true,
+    createdAt: true,
+    adminComment: true,
+    approvedAt: true
 };
 
 export const payrollSelect = {
@@ -201,23 +204,53 @@ export const getAttendanceCached = unstable_cache(
 );
 
 export const getLeavesCached = unstable_cache(
-    async (params: { employeeId?: string; status?: string }) => {
-        const { employeeId, status } = params;
+    async (params: { employeeId?: string; status?: string; recentDays?: number; take?: number }) => {
+        const { employeeId, status, recentDays, take } = params;
+        console.log("🗄️ [DATA LAYER] getLeavesCached called with params:", params);
+
         const where: any = {};
 
         if (employeeId) where.employeeId = employeeId;
-        if (status && status !== "all") where.status = status;
+        if (status && status !== "all") {
+            const s = typeof status === 'string' ? status.toUpperCase() : status;
+            if (["PENDING", "APPROVED", "REJECTED"].includes(s)) where.status = s;
+        }
 
-        return prisma.leaveRequest.findMany({
+        // Handle recentDays filtering based on status
+        if (recentDays && !isNaN(recentDays)) {
+            const now = new Date();
+            const threshold = new Date(now);
+            threshold.setDate(now.getDate() - recentDays);
+            // Normalize threshold to start of day to be inclusive
+            threshold.setHours(0, 0, 0, 0);
+
+            // For APPROVED status, filter by approvedAt (when it was approved)
+            // For PENDING/REJECTED or no specific status, filter by createdAt (when it was created)
+            if (status && status.toUpperCase() === "APPROVED") {
+                where.approvedAt = { gte: threshold };
+            } else {
+                // For pending, rejected, or all statuses, use createdAt
+                where.createdAt = { gte: threshold };
+            }
+            console.log("📅 [DATA LAYER] Date threshold:", threshold.toISOString());
+        }
+
+        console.log("🔎 [DATA LAYER] Prisma where clause:", JSON.stringify(where, null, 2));
+        const takeCount = typeof take === 'number' && take > 0 ? take : 200;
+
+        const results = await prisma.leaveRequest.findMany({
             where,
             select: {
                 ...leaveSelect,
-                employee: { select: { fullName: true, employeeCode: true } }
+                employee: { select: { fullName: true, employeeCode: true, department: true, designation: true, id: true } }
             },
             orderBy: { createdAt: "desc" },
-            take: 50,
+            take: takeCount,
         });
+
+        console.log("💾 [DATA LAYER] Query returned", results.length, "results");
+        return results;
     },
     ["leaves-list"],
-    { tags: [TAGS.leaves], revalidate: 180 } // Increased from 60s to 3min
+    { tags: [TAGS.leaves], revalidate: 10 } // Reduced from 180s to 10s for faster admin dashboard updates
 );

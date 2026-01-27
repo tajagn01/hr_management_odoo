@@ -59,6 +59,7 @@ export default function EmployeeAttendancePage() {
   const [elapsedTime, setElapsedTime] = useState<string>("00:00:00");
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [monthlyAttendance, setMonthlyAttendance] = useState<AttendanceRecord[]>([]);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
 
@@ -105,10 +106,10 @@ export default function EmployeeAttendancePage() {
   // Fetch today's attendance
   const fetchTodayAttendance = useCallback(async (empId: string) => {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      // Use UTC boundaries to avoid timezone drift when querying the API
+      const now = new Date();
+      const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+      const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1));
 
       const res = await fetch(
         `/api/attendance?employeeId=${empId}&startDate=${today.toISOString()}&endDate=${tomorrow.toISOString()}`
@@ -130,9 +131,10 @@ export default function EmployeeAttendancePage() {
   // Fetch monthly attendance
   const fetchMonthlyAttendance = useCallback(async (empId: string) => {
     try {
-      const today = new Date();
-      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      // Use UTC month boundaries
+      const now = new Date();
+      const firstDayOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
+      const lastDayOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999));
 
       const res = await fetch(
         `/api/attendance?employeeId=${empId}&startDate=${firstDayOfMonth.toISOString()}&endDate=${lastDayOfMonth.toISOString()}`
@@ -204,6 +206,7 @@ export default function EmployeeAttendancePage() {
     setCheckOutTime(null);
 
     try {
+      setSubmitting(true);
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -213,8 +216,9 @@ export default function EmployeeAttendancePage() {
       if (res.ok) {
         const data = await res.json();
         // Update with server time just to be precise
-        const serverNow = new Date(data.attendance.checkIn);
+        const serverNow = data.attendance?.checkIn ? new Date(data.attendance.checkIn) : new Date();
         setCheckInTime(serverNow);
+        setIsCheckedIn(!!data.attendance?.checkIn);
 
         // Refresh data in background without blocking UI
         if (employeeId) {
@@ -236,6 +240,8 @@ export default function EmployeeAttendancePage() {
       setIsCheckedIn(prevIsCheckedIn);
       setIsCheckedOut(prevIsCheckedOut);
       setCheckInTime(prevCheckInTime);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -252,6 +258,7 @@ export default function EmployeeAttendancePage() {
     setIsCheckedOut(true);
 
     try {
+      setSubmitting(true);
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -260,8 +267,9 @@ export default function EmployeeAttendancePage() {
 
       if (res.ok) {
         const data = await res.json();
-        const serverNow = new Date(data.attendance.checkOut);
+        const serverNow = data.attendance?.checkOut ? new Date(data.attendance.checkOut) : new Date();
         setCheckOutTime(serverNow);
+        setIsCheckedOut(!!data.attendance?.checkOut);
 
         // Refresh data in background without blocking UI
         if (employeeId) {
@@ -281,6 +289,8 @@ export default function EmployeeAttendancePage() {
       // Rollback on error
       setIsCheckedOut(prevIsCheckedOut);
       setCheckOutTime(prevCheckOutTime);
+    } finally {
+      setSubmitting(false);
     }
   };
 
