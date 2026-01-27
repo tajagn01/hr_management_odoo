@@ -26,6 +26,7 @@ interface NotificationContextType {
   isLoading: boolean;
   markAsRead: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
 }
 
@@ -169,12 +170,31 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  // Clear all notifications
+  const clearAllNotifications = useCallback(async () => {
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (response.ok) {
+        setNotifications([]);
+        setUnreadCount(0);
+      }
+    } catch (error) {
+      console.error("Failed to clear all notifications:", error);
+    }
+  }, []);
+
+
   const value: NotificationContextType = {
     notifications,
     unreadCount,
     isLoading,
     markAsRead,
     markAllAsRead,
+    clearAllNotifications,
     refreshNotifications: fetchNotifications,
   };
 

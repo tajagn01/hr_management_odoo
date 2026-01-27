@@ -141,3 +141,33 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Failed to update notification" }, { status: 500 });
   }
 }
+
+// DELETE /api/notifications - Clear all notifications
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Delete all user's notifications
+    await prisma.notification.deleteMany({
+      where: { userId: user.id },
+    });
+
+    console.log(`🗑️ Cleared all notifications for user ${user.id}`);
+
+    return NextResponse.json({ message: "All notifications cleared" });
+  } catch (error) {
+    console.error("❌ Error clearing notifications:", error);
+    return NextResponse.json({ error: "Failed to clear notifications" }, { status: 500 });
+  }
+}
