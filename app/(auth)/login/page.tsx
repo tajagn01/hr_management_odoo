@@ -149,7 +149,7 @@ function LoginContent() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => signIn("google", { callbackUrl: "/admin" })}
+          onClick={() => signIn("google")}
           className="w-full py-2 h-10 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg transition-all"
         >
           <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
