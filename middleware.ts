@@ -37,6 +37,7 @@ export async function middleware(request: NextRequest) {
   // Redirect authenticated users from root to their dashboard
   if (pathname === "/" && isLoggedIn) {
     const role = token?.role as string;
+    console.log(`🔄 Redirecting authenticated user from root - Role: ${role}`);
     if (role === "ADMIN") {
       return NextResponse.redirect(new URL("/admin", request.url));
     } else if (role === "MANAGER") {

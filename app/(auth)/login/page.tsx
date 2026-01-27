@@ -42,8 +42,20 @@ function LoginContent() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        // Trigger a full page reload to let middleware handle role-based redirect
-        window.location.href = window.location.origin;
+        // Get the session to determine role-based redirect
+        const response = await fetch("/api/auth/session");
+        const session = await response.json();
+        const role = session?.user?.role;
+
+        // Redirect based on role
+        if (role === "ADMIN") {
+          router.push("/admin");
+        } else if (role === "MANAGER") {
+          router.push("/manager");
+        } else {
+          router.push("/employee");
+        }
+        router.refresh();
       }
     } catch (error) {
       setError("An error occurred. Please try again.");
