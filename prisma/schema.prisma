@@ -56,6 +56,7 @@ model User {
 
   employee            Employee?
   sessions            Session[]
+  notifications       Notification[]
 
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
@@ -240,6 +241,29 @@ model Payroll {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+//////////////////////////////////////////////////
+// NOTIFICATIONS
+//////////////////////////////////////////////////
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // INFO, SUCCESS, WARNING, ERROR
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  metadata  Json?    // Additional data (leaveId, employeeId, etc.)
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 //////////////////////////////////////////////////

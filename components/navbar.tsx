@@ -45,70 +45,12 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { SidebarContent } from "@/components/sidebar";
+import { useNotifications } from "@/contexts/notification-context";
 
 // Dynamically import CommandMenu to prevent hydration mismatch
 const CommandMenu = dynamic(() => import("@/components/command-menu").then(mod => ({ default: mod.CommandMenu })), {
   ssr: false,
 });
-
-interface Notification {
-  id: number;
-  type: string;
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
-  role?: "ADMIN" | "EMPLOYEE" | "ALL";
-}
-
-// Initial mock notifications
-const initialNotifications: Notification[] = [
-  {
-    id: 1,
-    type: "leave_approved",
-    title: "Leave Request Approved",
-    message: "Your vacation leave for Jan 15-17 has been approved",
-    time: "2 hours ago",
-    read: false,
-    role: "EMPLOYEE",
-  },
-  {
-    id: 2,
-    type: "leave_pending",
-    title: "New Leave Request",
-    message: "John Doe requested sick leave for Jan 10",
-    time: "3 hours ago",
-    read: false,
-    role: "ADMIN",
-  },
-  {
-    id: 3,
-    type: "leave_rejected",
-    title: "Leave Request Rejected",
-    message: "Your personal leave for Jan 20 was rejected",
-    time: "1 day ago",
-    read: true,
-    role: "EMPLOYEE",
-  },
-  {
-    id: 4,
-    type: "payroll",
-    title: "Payroll Processed",
-    message: "December 2025 salary has been credited",
-    time: "2 days ago",
-    read: true,
-    role: "ALL",
-  },
-  {
-    id: 5,
-    type: "reminder",
-    title: "Attendance Reminder",
-    message: "Don't forget to check out before leaving",
-    time: "3 days ago",
-    read: true,
-    role: "ALL",
-  },
-];
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -117,18 +59,13 @@ export default function Navbar() {
   const [mounted, setMounted] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const isAdmin = pathname?.startsWith("/admin");
   const userRole = (session?.user as any)?.role || "EMPLOYEE";
 
-  // Filter notifications based on user role
-  const filteredNotifications = notifications.filter(n =>
-    n.role === "ALL" || n.role === userRole
-  );
-
-  const unreadCount = filteredNotifications.filter(n => !n.read).length;
+  // Use real notifications from context
+  const { notifications, unreadCount, markAllAsRead, markAsRead } = useNotifications();
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -136,46 +73,12 @@ export default function Navbar() {
   }, []);
 
   // Mark all notifications as read when dropdown opens
-  const handleNotificationOpen = useCallback((open: boolean) => {
+  const handleNotificationOpen = useCallback(async (open: boolean) => {
     setIsNotificationOpen(open);
     if (open && unreadCount > 0) {
-      // Mark all notifications as read
-      setNotifications(prev =>
-        prev.map(n => ({ ...n, read: true }))
-      );
+      await markAllAsRead();
     }
-  }, [unreadCount]);
-
-  // Listen for new notifications from real-time events
-  useEffect(() => {
-    const handleNewNotification = (event: CustomEvent) => {
-      const data = event.detail;
-      const newNotification: Notification = {
-        id: Date.now(),
-        type: data.type || "info",
-        title: data.title || "Notification",
-        message: data.message || "",
-        time: "Just now",
-        read: false,
-        role: data.role || "ALL",
-      };
-
-      // Only add if matches user role
-      if (newNotification.role === "ALL" || newNotification.role === userRole) {
-        setNotifications(prev => [newNotification, ...prev]);
-      }
-    };
-
-    window.addEventListener("notification:show", handleNewNotification as EventListener);
-    window.addEventListener("notification:admin", handleNewNotification as EventListener);
-    window.addEventListener("notification:employee", handleNewNotification as EventListener);
-
-    return () => {
-      window.removeEventListener("notification:show", handleNewNotification as EventListener);
-      window.removeEventListener("notification:admin", handleNewNotification as EventListener);
-      window.removeEventListener("notification:employee", handleNewNotification as EventListener);
-    };
-  }, [userRole]);
+  }, [unreadCount, markAllAsRead]);
 
   const handleLogout = async () => {
     try {
@@ -288,58 +191,64 @@ export default function Navbar() {
                 </div>
                 <ScrollArea className="h-80">
                   <div className="p-2">
-                    {filteredNotifications.length === 0 ? (
+                    {notifications.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">
                         <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p className="text-sm">No notifications</p>
                       </div>
                     ) : (
-                      filteredNotifications.map((notification) => {
+                      notifications.map((notification) => {
                         const getIcon = () => {
                           switch (notification.type) {
-                            case "leave_approved":
-                            case "success":
+                            case "SUCCESS":
                               return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-                            case "leave_rejected":
-                            case "error":
+                            case "ERROR":
                               return <XCircle className="h-4 w-4 text-red-500" />;
-                            case "leave_pending":
-                            case "warning":
+                            case "WARNING":
                               return <CalendarOff className="h-4 w-4 text-amber-500" />;
-                            case "payroll":
-                              return <DollarSign className="h-4 w-4 text-blue-500" />;
-                            case "reminder":
-                            case "info":
-                              return <AlertCircle className="h-4 w-4 text-purple-500" />;
+                            case "INFO":
                             default:
-                              return <Bell className="h-4 w-4 text-muted-foreground" />;
+                              return <AlertCircle className="h-4 w-4 text-blue-500" />;
                           }
                         };
 
                         const getBgColor = () => {
                           switch (notification.type) {
-                            case "leave_approved":
-                            case "success":
+                            case "SUCCESS":
                               return "bg-green-100 dark:bg-green-900/30";
-                            case "leave_rejected":
-                            case "error":
+                            case "ERROR":
                               return "bg-red-100 dark:bg-red-900/30";
-                            case "leave_pending":
-                            case "warning":
+                            case "WARNING":
                               return "bg-amber-100 dark:bg-amber-900/30";
-                            case "payroll":
-                              return "bg-blue-100 dark:bg-blue-900/30";
-                            case "reminder":
-                            case "info":
-                              return "bg-purple-100 dark:bg-purple-900/30";
+                            case "INFO":
                             default:
-                              return "bg-muted";
+                              return "bg-blue-100 dark:bg-blue-900/30";
                           }
+                        };
+
+                        // Format time from createdAt timestamp
+                        const getTimeAgo = (timestamp: string) => {
+                          const now = new Date();
+                          const created = new Date(timestamp);
+                          const diffMs = now.getTime() - created.getTime();
+                          const diffMins = Math.floor(diffMs / 60000);
+                          const diffHours = Math.floor(diffMs / 3600000);
+                          const diffDays = Math.floor(diffMs / 86400000);
+
+                          if (diffMins < 1) return "Just now";
+                          if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+                          if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+                          return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
                         };
 
                         return (
                           <div
                             key={notification.id}
+                            onClick={() => {
+                              if (!notification.read) {
+                                markAsRead(notification.id);
+                              }
+                            }}
                             className={cn(
                               "flex gap-3 p-3 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
                               !notification.read && "bg-muted/30"
@@ -353,18 +262,13 @@ export default function Navbar() {
                                 <p className={cn("text-sm font-medium leading-none", !notification.read && "font-semibold")}>
                                   {notification.title}
                                 </p>
-                                {notification.role && notification.role !== "ALL" && (
-                                  <Badge variant="outline" className="text-[10px] px-1">
-                                    {notification.role === "ADMIN" ? "Admin" : "You"}
-                                  </Badge>
-                                )}
                               </div>
                               <p className="text-xs text-muted-foreground line-clamp-2">
                                 {notification.message}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 <Clock className="inline h-3 w-3 mr-1" />
-                                {notification.time}
+                                {getTimeAgo(notification.createdAt)}
                               </p>
                             </div>
                           </div>

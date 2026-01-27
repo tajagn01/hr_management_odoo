@@ -5,6 +5,7 @@ import "./animations.css";
 import NextAuthProvider from "@/components/session-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { RealtimeProvider } from "@/contexts/realtime-context";
+import { NotificationProvider } from "@/contexts/notification-context";
 import QueryProvider from "@/components/providers/query-provider";
 
 const inter = Inter({
@@ -44,7 +45,9 @@ export default function RootLayout({
           <NextAuthProvider>
             <QueryProvider>
               <RealtimeProvider>
-                {children}
+                <NotificationProvider>
+                  {children}
+                </NotificationProvider>
               </RealtimeProvider>
             </QueryProvider>
           </NextAuthProvider>

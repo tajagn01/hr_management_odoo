@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
+import { TAGS } from "@/lib/data";
 import { auth } from "@/auth";
 import {
   emitAttendanceCheckIn,
@@ -322,7 +324,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid type. Must be 'checkIn' or 'checkOut'" }, { status: 400 });
     }
 
-    revalidateTag(TAGS.attendance); // Invalidate cache
+    revalidateTag(TAGS.attendance, "default"); // Invalidate cache
 
     return NextResponse.json({
       message: `${type === "checkIn" ? "Checked in" : "Checked out"} successfully`,

@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { cache } from "@/lib/utils";
 import { revalidateTag } from "next/cache";
 import { getLeavesCached, TAGS } from "@/lib/data";
+import { notifyAdmins } from "@/lib/notifications";
+import { createNotification } from "@/lib/notifications";
 
 // GET leave requests
 export async function GET(request: NextRequest) {
@@ -100,7 +102,26 @@ export async function POST(request: NextRequest) {
     });
 
     // Invalidate cache
-    revalidateTag(TAGS.leaves, "max");
+    revalidateTag(TAGS.leaves, "default");
+
+    // Notify all admins about new leave request
+    try {
+      await notifyAdmins({
+        type: "INFO",
+        title: "New Leave Request",
+        message: `${leaveRequest.employee.fullName} requested ${leaveRequest.days} day(s) of ${leaveRequest.type.toLowerCase()} leave`,
+        metadata: {
+          leaveId: leaveRequest.id,
+          employeeId: leaveRequest.employeeId,
+          employeeName: leaveRequest.employee.fullName,
+          type: leaveRequest.type,
+          days: leaveRequest.days,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+      // Don't fail the request if notification fails
+    }
 
     return NextResponse.json(
       { message: "Leave request submitted successfully", leaveRequest },
@@ -161,7 +182,33 @@ export async function PUT(request: NextRequest) {
     });
 
     // Invalidate cache
-    revalidateTag(TAGS.leaves, "max");
+    revalidateTag(TAGS.leaves, "default");
+
+    // Notify employee about leave status change
+    try {
+      const employee = await prisma.employee.findUnique({
+        where: { id: leaveRequest.employeeId },
+        include: { user: true },
+      });
+
+      if (employee?.user) {
+        await createNotification({
+          userId: employee.user.id,
+          type: status.toUpperCase() === "APPROVED" ? "SUCCESS" : "ERROR",
+          title: `Leave Request ${status.toUpperCase() === "APPROVED" ? "Approved" : "Rejected"}`,
+          message: `Your ${leaveRequest.type.toLowerCase()} leave request for ${leaveRequest.days} day(s) has been ${status.toLowerCase()}${adminComment ? `: ${adminComment}` : ""}`,
+          metadata: {
+            leaveId: leaveRequest.id,
+            type: leaveRequest.type,
+            days: leaveRequest.days,
+            status: status.toUpperCase(),
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+      // Don't fail the request if notification fails
+    }
 
     return NextResponse.json({
       message: `Leave request ${status.toLowerCase()} successfully`,

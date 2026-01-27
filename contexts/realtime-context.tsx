@@ -52,11 +52,9 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Skip Socket.IO in development mode unless explicitly configured
-    // Socket.IO requires the custom server (server.ts) which isn't used in 'npm run dev'
-    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+    // Connect to Socket.IO (use window.location.origin if no URL configured)
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== "undefined" ? window.location.origin : "");
     if (!socketUrl) {
-      // No socket URL configured - skip initialization
       setConnectionFailed(true);
       return;
     }
