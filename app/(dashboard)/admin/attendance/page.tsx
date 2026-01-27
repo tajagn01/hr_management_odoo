@@ -46,13 +46,17 @@ interface AttendanceData {
 const getStatusBadge = (status: string) => {
   switch (status) {
     case "present":
+    case "half-day":
       return <Badge className="bg-green-500 hover:bg-green-600">Present</Badge>;
     case "absent":
       return <Badge variant="destructive">Absent</Badge>;
     case "late":
       return <Badge className="bg-amber-500 hover:bg-amber-600">Late</Badge>;
     case "leave":
+    case "on-leave":
       return <Badge className="bg-blue-500 hover:bg-blue-600">On Leave</Badge>;
+    case "holiday":
+      return <Badge className="bg-purple-500 hover:bg-purple-600">Holiday</Badge>;
     default:
       return <Badge variant="secondary">-</Badge>;
   }
@@ -105,9 +109,28 @@ export default function AdminAttendancePage() {
         attendanceMap.set(record.employeeId, record);
       });
 
-      // Combine employee data with attendance records
+      // NEW: Fetch calculated bulk status to handle absent/leave/holiday correctly
+      const employeeIds = employees.map((e: any) => e.id);
+      const params = new URLSearchParams();
+      params.append('startDate', today.toISOString());
+      params.append('endDate', today.toISOString());
+      employeeIds.forEach((id: string) => params.append('employeeIds[]', id));
+
+      const statusRes = await fetch(`/api/attendance/status/bulk?${params.toString()}`);
+      const statusData = await statusRes.json();
+      const statusMap = new Map();
+      if (statusData.results) {
+        statusData.results.forEach((s: any) => {
+          // keyed by employeeId since we only requested one day
+          statusMap.set(s.employeeId, s.status);
+        });
+      }
+
+      // Combine employee data with attendance records + calculated status
       const combinedData = employees.map((emp: any) => {
         const record = attendanceMap.get(emp.id);
+        const calculatedStatus = statusMap.get(emp.id);
+
         const checkIn = record?.checkIn ? new Date(record.checkIn).toLocaleTimeString('en-US', {
           hour: '2-digit',
           minute: '2-digit',
@@ -131,8 +154,13 @@ export default function AdminAttendancePage() {
           workHours = "Working...";
         }
 
+        // Priority: Calculated Status > Record Status > Absent
+        // This ensures "Available/Holiday" logic is respected even if no record exists
         let status = "absent";
-        if (record) {
+
+        if (calculatedStatus) {
+          status = calculatedStatus.toLowerCase().replace('_', '-');
+        } else if (record) {
           status = record.status?.toLowerCase().replace('_', '-') || "absent";
         }
 
@@ -180,6 +208,40 @@ export default function AdminAttendancePage() {
     fetchAttendanceData();
   };
 
+  const handleExport = () => {
+    // Create CSV content
+    const headers = ["Employee Name", "Email", "Department", "Date", "Check In", "Check Out", "Work Hours", "Status"];
+    const todayStr = new Date().toLocaleDateString('en-US');
+
+    const rows = filteredData.map(emp => [
+      emp.name,
+      emp.email,
+      emp.department,
+      todayStr,
+      emp.checkIn || "-",
+      emp.checkOut || "-",
+      emp.workHours,
+      emp.status
+    ]);
+
+    // Create CSV string
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+    ].join("\n");
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `attendance_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6" suppressHydrationWarning>
       {/* Header */}
@@ -202,7 +264,7 @@ export default function AdminAttendancePage() {
               <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
@@ -221,7 +283,7 @@ export default function AdminAttendancePage() {
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Refresh
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExport}>
                   <Download className="h-4 w-4 mr-2" />
                   Export Data
                 </DropdownMenuItem>

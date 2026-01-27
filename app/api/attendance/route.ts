@@ -11,6 +11,7 @@ import {
 } from "@/lib/realtime-emitter";
 import { updateMonthlyAttendance } from "@/lib/attendance-aggregator";
 import { logger } from "@/lib/logger";
+import { calculateAttendanceStatus } from "@/lib/attendance-service";
 
 // GET attendance records
 export async function GET(request: NextRequest) {
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
           employeeId,
           date: today,
           // @ts-ignore
-          status: "PRESENT",
+          status: await calculateAttendanceStatus(employeeId, today),
           checkIn: now,
         },
         include: {
@@ -293,6 +294,9 @@ export async function POST(request: NextRequest) {
           checkOut: now,
           // @ts-ignore
           workingHours: Math.round(workingHours * 100) / 100, // Round to 2 decimal places
+          // Recalculate status on check-out (e.g. check for HALF_DAY)
+          // @ts-ignore
+          status: await calculateAttendanceStatus(employeeId, today),
         },
         include: {
           employee: {

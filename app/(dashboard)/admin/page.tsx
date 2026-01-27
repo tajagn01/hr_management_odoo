@@ -191,7 +191,9 @@ export default function AdminPage() {
     await Promise.all([
       queryClient.refetchQueries({ queryKey: ['employees', 'with-payroll'] }),
       // Refetch all attendance queries (dashboard stats, yearly chart, etc.)
+      // Refetch all attendance queries (dashboard stats, yearly chart, etc.)
       queryClient.refetchQueries({ queryKey: ['attendance'] }),
+      queryClient.refetchQueries({ queryKey: ['attendance-status'] }), // Refresh cached status
       queryClient.refetchQueries({ queryKey: ['leave-requests', 'all'] }),
       queryClient.refetchQueries({ queryKey: ['leave-requests', 'recent'] }), // Added: Refetch recent leaves
       queryClient.invalidateQueries({ queryKey: ['attendance-stats'] }),
@@ -200,85 +202,68 @@ export default function AdminPage() {
     setIsRefreshing(false);
   };
 
-  // Memoize all derived calculations
+  // 4. Fetch Real-time Status from API (Bulk) to ensure consistency
+  // This replaces client-side calculation logic
+  const { data: statusData } = useQuery({
+    queryKey: ['attendance-status', 'dashboard', today.toISOString()],
+    queryFn: async () => {
+      const allEmployees = employeesData?.employees || [];
+      if (allEmployees.length === 0) return { results: [] };
+
+      const ids = allEmployees.map((e: any) => e.id);
+      // Construct URL carefully to handle many IDs
+      const params = new URLSearchParams();
+      params.append('startDate', today.toISOString());
+      params.append('endDate', today.toISOString());
+      ids.forEach((id: string) => params.append('employeeIds[]', id));
+
+      const res = await fetch(`/api/attendance/status/bulk?${params.toString()}`);
+      return res.json();
+    },
+    enabled: !!employeesData?.employees?.length,
+    placeholderData: keepPreviousData,
+    staleTime: 60000, // 1 minute stale time
+  });
+
   const stats = useMemo(() => {
     const allEmployees = employeesData?.employees || [];
-    // FIXED: Count ALL employees, not just role=EMPLOYEE
-    // ADMIN and MANAGER users can also check in/out and should be counted
     const totalEmployees = allEmployees.length;
 
     const monthlyPayroll = allEmployees.reduce((sum: number, emp: any) => {
       return sum + (emp.payroll?.netSalary || 0);
     }, 0);
 
+    const calculatedStatuses = statusData?.results || [];
+
+    // Group By Status
+    const presentCount = calculatedStatuses.filter((r: any) => r.status === 'PRESENT' || r.status === 'HALF_DAY').length;
+    const lateCount = calculatedStatuses.filter((r: any) => r.status === 'LATE').length;
+    const onLeaveCount = calculatedStatuses.filter((r: any) => r.status === 'ON_LEAVE').length;
+    const absentCount = calculatedStatuses.filter((r: any) => r.status === 'ABSENT').length;
+
+    // Note: lateCount is typically considered "Present" but late. 
+    // If you want "Present Today" to include Late people:
+    const totalPresent = presentCount + lateCount;
+
     const allEmployeeIds = new Set(allEmployees.map((e: any) => e.id));
-
-    // 1. Calculate Present & Late
-    let presentCount = 0;
-    let lateCount = 0;
-    const LATE_THRESHOLD_HOUR = 9;
-    const LATE_THRESHOLD_MINUTE = 30;
-
-    const presentRecords = attendanceData?.attendanceRecords?.filter((a: any) => {
-      if (!allEmployeeIds.has(a.employeeId)) return false;
-      const status = a.status?.toUpperCase();
-      const isPresent = status === "PRESENT" || status === "HALF_DAY" || (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE" && status !== "LEAVE");
-
-      if (isPresent) {
-        presentCount++;
-        // Check for Late
-        if (a.checkIn) {
-          const checkInTime = new Date(a.checkIn);
-          const thresholdTime = new Date(checkInTime);
-          thresholdTime.setHours(LATE_THRESHOLD_HOUR, LATE_THRESHOLD_MINUTE, 0, 0);
-          if (checkInTime > thresholdTime) {
-            lateCount++;
-          }
-        }
-      }
-      return isPresent;
-    }) || [];
-
-    // 2. Calculate On Leave (Approved leaves for today)
-    const onLeaveCount = leaveData?.leaveRequests?.filter((lr: any) => {
-      if (!allEmployeeIds.has(lr.employeeId)) return false;
-      if (lr.status !== "APPROVED") return false;
-
-      const start = new Date(lr.startDate);
-      const end = new Date(lr.endDate);
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-
-      // Check overlap
-      return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
-    }).length || 0;
-
-
-    // 3. Calculate Absent
-    // Rule: Total - Present - On Leave
-    // Ensure non-negative
-    const calculatedAbsent = totalEmployees - presentCount - onLeaveCount;
-    const absentCount = calculatedAbsent > 0 ? calculatedAbsent : 0;
-
-
     const allLeaves = leaveData?.leaveRequests || [];
     const pendingLeaves = allLeaves.filter((lr: any) =>
       lr.status === "PENDING" && allEmployeeIds.has(lr.employeeId)
     ).length;
 
-    // Combine with realtime stats if available
-    const displayPresent = attendanceStats.presentToday > 0 ? attendanceStats.presentToday : presentCount;
+    // Combine with realtime stats for "Present Today" if websocket pushed updates
+    const displayPresent = attendanceStats.presentToday > 0 ? attendanceStats.presentToday : totalPresent;
 
     return {
       totalEmployees,
-      presentToday: presentCount, // Use strict derived count
+      presentToday: totalPresent,
       absentToday: absentCount,
       lateToday: lateCount,
       onLeaveToday: onLeaveCount,
       pendingLeaves,
       monthlyPayroll,
     };
-  }, [employeesData, attendanceData, leaveData, attendanceStats]);
+  }, [employeesData, statusData, leaveData, attendanceStats]);
 
 
   const recentLeaveRequestsList = useMemo(() => {
@@ -600,7 +585,12 @@ export default function AdminPage() {
                 <CardDescription>Real-time attendance breakdown</CardDescription>
               </CardHeader>
               <CardContent>
-                <MemoizedAttendancePieChart />
+                <MemoizedAttendancePieChart data={{
+                  present: stats.presentToday,
+                  absent: stats.absentToday,
+                  late: stats.lateToday,
+                  leave: stats.onLeaveToday
+                }} />
               </CardContent>
             </Card>
           </div>

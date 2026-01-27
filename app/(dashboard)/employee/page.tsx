@@ -110,18 +110,12 @@ export default function EmployeePage() {
       const todayRecord = data.attendance?.find((a: any) => a.date.startsWith(todayDate));
 
       if (todayRecord) {
-        let status = todayRecord.status?.toLowerCase() || "not-marked";
-        let isLate = false;
+        // Fetch accurate calculated status from API
+        const statusRes = await fetch(`/api/attendance/status?employeeId=${session.user.employeeId}&date=${todayDate}`);
+        const statusData = await statusRes.json();
 
-        if (todayRecord.checkIn) {
-          const checkInTime = new Date(todayRecord.checkIn);
-          const thresholdTime = new Date(checkInTime);
-          thresholdTime.setHours(9, 30, 0, 0);
-          if (checkInTime > thresholdTime) {
-            isLate = true;
-            status = "late"; // Internal status for badge
-          }
-        }
+        // Use backend status (map to lowercase for frontend badge helper)
+        let status = statusData.status?.toLowerCase() || "not-marked";
 
         setTodayAttendance({
           status: status,
@@ -133,8 +127,14 @@ export default function EmployeePage() {
           }) : null,
         });
       } else {
-        setTodayAttendance({ status: "absent", checkIn: null, checkOut: null }); // Default to absent if no record/leave
-        // Check if On Leave (Override)
+        // Even if no record, check API for status (e.g. absent vs on-leave vs holiday)
+        const statusRes = await fetch(`/api/attendance/status?employeeId=${session.user.employeeId}&date=${todayDate}`);
+        const statusData = await statusRes.json();
+        const status = statusData.status?.toLowerCase() || "absent";
+
+        setTodayAttendance({ status, checkIn: null, checkOut: null });
+
+        // Check if On Leave (Override) - Keep for UI but status is already correct from API
         const onLeave = data.leaves?.find((l: any) => {
           if (l.status !== "APPROVED") return false;
           const start = new Date(l.startDate);
@@ -144,11 +144,9 @@ export default function EmployeePage() {
           return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
         });
 
-        if (onLeave) {
+        if (onLeave && status !== "on_leave") {
+          // Fallback if API didn't catch it yet for some reason (rare)
           setTodayAttendance({ status: "leave", checkIn: null, checkOut: null });
-        } else if (!todayRecord) {
-          // If literally no record and no leave, it's Absent (unless it's future/weekend - minimal logic: assume absent for today if active day)
-          setTodayAttendance({ status: "absent", checkIn: null, checkOut: null });
         }
       }
 

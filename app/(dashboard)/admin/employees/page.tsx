@@ -1,6 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo } from "react";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -73,8 +75,10 @@ export default function AdminEmployeesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
@@ -245,6 +249,8 @@ export default function AdminEmployeesPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+
         </div>
       </div>
 
@@ -377,25 +383,7 @@ export default function AdminEmployeesPage() {
                         </div>
                       </div>
 
-                      {/* Action Menu */}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Eye className="h-4 w-4 mr-2" /> View Profile
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="h-4 w-4 mr-2" /> Edit Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            <Trash2 className="h-4 w-4 mr-2" /> Remove
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+
                     </div>
 
                     {/* Quick Info Grid */}
@@ -453,13 +441,12 @@ export default function AdminEmployeesPage() {
                     <th className="text-left p-4 font-medium">Role</th>
                     <th className="text-left p-4 font-medium">Salary</th>
                     <th className="text-left p-4 font-medium">Status</th>
-                    <th className="text-left p-4 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading && employees.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-8">
+                      <td colSpan={6} className="text-center py-8">
                         <div className="flex items-center justify-center">
                           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
                           Loading employees...
@@ -524,29 +511,6 @@ export default function AdminEmployeesPage() {
                         }>
                           {employee.status === "active" ? "Active" : employee.status === "onboarding" ? "Onboarding" : "Inactive"}
                         </Badge>
-                      </td>
-                      <td className="p-4">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600">
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}

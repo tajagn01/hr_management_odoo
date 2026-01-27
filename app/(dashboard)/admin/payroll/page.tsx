@@ -739,6 +739,7 @@ export default function AdminPayrollPage() {
                 <Input
                   id="baseSalary"
                   type="number"
+                  min="0"
                   value={editFormData.baseSalary}
                   onChange={(e) => setEditFormData({ ...editFormData, baseSalary: parseFloat(e.target.value) || 0 })}
                   className="mt-1"
@@ -749,6 +750,7 @@ export default function AdminPayrollPage() {
                 <Input
                   id="hra"
                   type="number"
+                  min="0"
                   value={editFormData.hra}
                   onChange={(e) => setEditFormData({ ...editFormData, hra: parseFloat(e.target.value) || 0 })}
                   className="mt-1"
@@ -759,6 +761,7 @@ export default function AdminPayrollPage() {
                 <Input
                   id="allowances"
                   type="number"
+                  min="0"
                   value={editFormData.allowances}
                   onChange={(e) => setEditFormData({ ...editFormData, allowances: parseFloat(e.target.value) || 0 })}
                   className="mt-1"
@@ -769,6 +772,7 @@ export default function AdminPayrollPage() {
                 <Input
                   id="deductions"
                   type="number"
+                  min="0"
                   value={editFormData.deductions}
                   onChange={(e) => setEditFormData({ ...editFormData, deductions: parseFloat(e.target.value) || 0 })}
                   className="mt-1"

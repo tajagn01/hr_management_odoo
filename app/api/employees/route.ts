@@ -76,6 +76,7 @@ export async function GET(request: NextRequest) {
           phone: true,
           joiningDate: true,
           profileImage: true,
+          profileCompleted: true,
           user: {
             select: {
               email: true,

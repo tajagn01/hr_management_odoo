@@ -37,7 +37,7 @@ async function main() {
 
   // Create employee users
   const employeePassword = await bcrypt.hash("employee123", 10);
-  
+
   const johnUser = await prisma.user.create({
     data: {
       email: "john@dayflow.com",
@@ -69,6 +69,7 @@ async function main() {
       designation: "Product Manager",
       department: "Product",
       joining: new Date("2023-03-10"),
+      role: "MANAGER",
     },
     {
       email: "bob@dayflow.com",
@@ -79,6 +80,7 @@ async function main() {
       designation: "Frontend Developer",
       department: "IT",
       joining: new Date("2023-04-05"),
+      role: "EMPLOYEE",
     },
     {
       email: "carol@dayflow.com",
@@ -89,6 +91,7 @@ async function main() {
       designation: "Data Analyst",
       department: "Analytics",
       joining: new Date("2023-05-12"),
+      role: "EMPLOYEE",
     },
     {
       email: "david@dayflow.com",
@@ -99,6 +102,7 @@ async function main() {
       designation: "HR Manager",
       department: "Human Resources",
       joining: new Date("2023-06-01"),
+      role: "MANAGER",
     },
     {
       email: "emma@dayflow.com",
@@ -109,6 +113,7 @@ async function main() {
       designation: "Marketing Specialist",
       department: "Marketing",
       joining: new Date("2023-07-15"),
+      role: "EMPLOYEE",
     },
   ];
 
@@ -119,7 +124,7 @@ async function main() {
       data: {
         email: emp.email,
         password: employeePassword,
-        role: "EMPLOYEE",
+        role: (emp.role as "ADMIN" | "MANAGER" | "EMPLOYEE") || "EMPLOYEE",
         isActive: true,
         emailVerified: true,
       },
@@ -224,22 +229,22 @@ async function main() {
   // Create attendance records for the past week
   const today = new Date();
   const attendanceStatuses = ["PRESENT", "PRESENT", "ABSENT", "HALF_DAY", "PRESENT", "LEAVE", "PRESENT"];
-  
+
   for (let i = 6; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
 
     for (const emp of allEmployees) {
       const status = attendanceStatuses[i];
-      
+
       await prisma.attendance.create({
         data: {
           employeeId: emp.id,
           date: date,
           status: status as "PRESENT" | "ABSENT" | "HALF_DAY" | "LEAVE",
           checkIn: status !== "ABSENT" && status !== "LEAVE" ? new Date(date.setHours(9, Math.random() * 30, 0)) : null,
-          checkOut: status === "PRESENT" ? new Date(date.setHours(17, 30 + Math.random() * 30, 0)) : 
-                    status === "HALF_DAY" ? new Date(date.setHours(13, Math.random() * 60, 0)) : null,
+          checkOut: status === "PRESENT" ? new Date(date.setHours(17, 30 + Math.random() * 30, 0)) :
+            status === "HALF_DAY" ? new Date(date.setHours(13, Math.random() * 60, 0)) : null,
         },
       });
     }
