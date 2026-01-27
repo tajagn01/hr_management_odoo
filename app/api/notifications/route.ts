@@ -11,17 +11,23 @@ import { prisma } from "@/lib/prisma";
 // GET /api/notifications - Fetch user's notifications
 export async function GET(request: NextRequest) {
   try {
+    // Auth check
     const session = await auth();
     if (!session?.user?.email) {
+      console.error("❌ Notifications API: Unauthorized - no session");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user from database
+    // Get user from database with timeout
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+    }).catch((err) => {
+      console.error("❌ Notifications API: Database error finding user:", err);
+      throw new Error("Database connection failed");
     });
 
     if (!user) {
+      console.error("❌ Notifications API: User not found for email:", session.user.email);
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
@@ -30,7 +36,7 @@ export async function GET(request: NextRequest) {
     const unreadOnly = searchParams.get("unreadOnly") === "true";
     const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
 
-    // Fetch notifications
+    // Fetch notifications with error handling
     const where = {
       userId: user.id,
       ...(unreadOnly ? { read: false } : {}),
@@ -41,9 +47,15 @@ export async function GET(request: NextRequest) {
         where,
         orderBy: { createdAt: "desc" },
         take: limit,
+      }).catch((err) => {
+        console.error("❌ Notifications API: Error fetching notifications:", err);
+        return [];
       }),
       prisma.notification.count({
         where: { userId: user.id, read: false },
+      }).catch((err) => {
+        console.error("❌ Notifications API: Error counting notifications:", err);
+        return 0;
       }),
     ]);
 
@@ -60,9 +72,16 @@ export async function GET(request: NextRequest) {
       })),
       unreadCount,
     });
-  } catch (error) {
-    console.error("❌ Error fetching notifications:", error);
-    return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 500 });
+  } catch (error: any) {
+    console.error("❌ Error fetching notifications:", {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+    });
+    return NextResponse.json({
+      error: "Failed to fetch notifications",
+      details: process.env.NODE_ENV === "development" ? error?.message : undefined
+    }, { status: 500 });
   }
 }
 

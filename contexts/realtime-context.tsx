@@ -52,6 +52,16 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Check if Socket.IO is disabled (e.g., on Vercel serverless)
+    const isSocketDisabled = process.env.NEXT_PUBLIC_DISABLE_SOCKET_IO === "true" ||
+      typeof window !== "undefined" && window.location.hostname.includes("vercel.app");
+
+    if (isSocketDisabled) {
+      console.log("ℹ️ Socket.IO disabled in serverless environment - using API polling instead");
+      setConnectionFailed(true);
+      return;
+    }
+
     // Connect to Socket.IO (use window.location.origin if no URL configured)
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== "undefined" ? window.location.origin : "");
     if (!socketUrl) {

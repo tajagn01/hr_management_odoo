@@ -83,11 +83,11 @@ export default function Navbar() {
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
-      await signOut({ callbackUrl: "/login", redirect: true });
+      await signOut({ callbackUrl: "/", redirect: true });
     } catch (error) {
       console.error("Logout error:", error);
       // Force redirect even if signOut fails
-      window.location.href = "/login";
+      window.location.href = "/";
     } finally {
       setIsLoggingOut(false);
     }

@@ -70,7 +70,7 @@ export function DepartmentChart() {
     );
   }
   return (
-    <ResponsiveContainer width="100%" height={300}>
+    <ResponsiveContainer width="100%" height={300} minHeight={200}>
       <BarChart data={data} layout="vertical">
         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
         <XAxis type="number" className="text-xs" allowDecimals={false} />

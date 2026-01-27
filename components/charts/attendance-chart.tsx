@@ -90,7 +90,7 @@ export function AttendanceChart() {
 
   return (
     <div className="w-full h-80">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minHeight={200}>
         <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 6 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis dataKey="day" tick={{ fontSize: 11 }} />

@@ -69,13 +69,21 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Listen to Socket.IO events for new notifications (real-time updates)
   useEffect(() => {
     if (!socket || !isConnected) {
-      // Socket not connected - notifications will be fetched via API on refresh
+      // Socket not connected - use polling as fallback
+      if (status === "authenticated") {
+        console.log("ℹ️ Socket.IO not available - using polling for notifications");
+        const pollInterval = setInterval(() => {
+          fetchNotifications();
+        }, 30000); // Poll every 30 seconds
+
+        return () => clearInterval(pollInterval);
+      }
       return;
     }
 
     const handleNewNotification = (notification: any) => {
       console.log("📥 Received new notification via Socket.IO:", notification);
-      
+
       // Ensure notification has required fields
       const formattedNotification: Notification = {
         id: notification.id,
@@ -87,7 +95,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         metadata: notification.metadata || null,
         createdAt: notification.createdAt || new Date().toISOString(),
       };
-      
+
       // Check if notification already exists (prevent duplicates from API fetch)
       setNotifications((prev) => {
         const exists = prev.some((n) => n.id === formattedNotification.id);

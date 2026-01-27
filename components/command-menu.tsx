@@ -145,7 +145,7 @@ export function CommandMenu() {
 
         <CommandGroup heading="Account">
           <CommandItem
-            onSelect={() => runCommand(() => signOut({ callbackUrl: "/login" }))}
+            onSelect={() => runCommand(() => signOut({ callbackUrl: "/" }))}
             className="text-red-600"
           >
             <LogOut className="mr-2 h-4 w-4" />
