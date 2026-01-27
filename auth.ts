@@ -10,6 +10,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   session: {
     strategy: "jwt", // Use JWT sessions for Credentials provider
   },
+  useSecureCookies: process.env.NODE_ENV === "production", // Use secure cookies in production
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,

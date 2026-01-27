@@ -10,15 +10,22 @@ export async function middleware(request: NextRequest) {
   // Get the token from the session
   const token = await getToken({
     req: request,
-    secret: process.env.AUTH_SECRET
+    secret: process.env.AUTH_SECRET,
+    secureCookie: process.env.NODE_ENV === "production", // Use secure cookies in production
   });
 
   const isLoggedIn = !!token;
   const isOnAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
   const isOnProtectedRoute = pathname.startsWith("/admin") || pathname.startsWith("/employee") || pathname.startsWith("/manager");
 
+  // Debug logging for production
+  if (process.env.NODE_ENV === "production" && (isOnProtectedRoute || pathname === "/")) {
+    console.log(`🔍 Middleware - Path: ${pathname}, LoggedIn: ${isLoggedIn}, Role: ${token?.role || 'none'}`);
+  }
+
   // Redirect to login if trying to access protected routes without authentication
   if (isOnProtectedRoute && !isLoggedIn) {
+    console.log(`🚫 Redirecting to login - No session found for: ${pathname}`);
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
