@@ -34,6 +34,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Redirect authenticated users from root to their dashboard
+  if (pathname === "/" && isLoggedIn) {
+    const role = token?.role as string;
+    if (role === "ADMIN") {
+      return NextResponse.redirect(new URL("/admin", request.url));
+    } else if (role === "MANAGER") {
+      return NextResponse.redirect(new URL("/manager", request.url));
+    } else if (role === "EMPLOYEE") {
+      return NextResponse.redirect(new URL("/employee", request.url));
+    }
+  }
+
   // Enforce role-based access to protected routes
   if (isLoggedIn && isOnProtectedRoute) {
     const role = token?.role as string;

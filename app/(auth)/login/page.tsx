@@ -42,8 +42,8 @@ function LoginContent() {
       if (result?.error) {
         setError("Invalid email or password");
       } else {
-        // Let middleware handle role-based redirect
-        window.location.href = "/";
+        // Trigger a full page reload to let middleware handle role-based redirect
+        window.location.href = window.location.origin;
       }
     } catch (error) {
       setError("An error occurred. Please try again.");
