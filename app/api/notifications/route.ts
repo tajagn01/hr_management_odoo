@@ -59,6 +59,18 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    // Debug logging for production
+    console.log(`✅ Notifications API: Found ${notifications.length} notifications for user ${user.id} (${user.email})`);
+    console.log(`✅ Notifications API: Unread count: ${unreadCount}`);
+    if (notifications.length > 0) {
+      console.log(`✅ Notifications API: Latest notification:`, {
+        id: notifications[0].id,
+        title: notifications[0].title,
+        createdAt: notifications[0].createdAt,
+      });
+    }
+
+
     return NextResponse.json({
       notifications: notifications.map((n) => ({
         id: n.id,
