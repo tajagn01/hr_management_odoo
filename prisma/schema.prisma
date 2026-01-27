@@ -40,6 +40,13 @@ enum LeaveType {
   UNPAID
 }
 
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
 //////////////////////////////////////////////////
 // USER (AUTH + BASIC INFO)
 //////////////////////////////////////////////////
@@ -250,7 +257,7 @@ model Payroll {
 model Notification {
   id        String   @id @default(uuid())
   userId    String
-  type      String   // INFO, SUCCESS, WARNING, ERROR
+  type      NotificationType   // INFO, SUCCESS, WARNING, ERROR
   title     String
   message   String
   read      Boolean  @default(false)
