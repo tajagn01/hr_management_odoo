@@ -45,13 +45,16 @@ export function AttendancePieChart({ data }: AttendancePieChartProps) {
         </Pie>
         <Tooltip
           contentStyle={{
-            backgroundColor: "#1f29372a",
-            borderColor: "#374151",
-            borderRadius: "var(--radius)",
-            color: "#ffffff"
+            backgroundColor: "rgba(255, 255, 255, 0.9)",
+            border: "1px solid rgba(0, 0, 0, 0.1)",
+            borderRadius: "6px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
+            color: "#000000",
+            padding: "8px"
           }}
           formatter={(value: any) => [`${value} ${value === 1 ? 'Employee' : 'Employees'}`, "Count"]}
-          itemStyle={{ color: "#ffffff" }}
+          itemStyle={{ color: "#000000" }}
+          labelStyle={{ color: "#000000" }}
         />
         <Legend />
       </PieChart>

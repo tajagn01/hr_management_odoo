@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AttendanceCalendar } from "@/components/dashboard/attendance-calendar";
 import {
   Clock,
@@ -62,6 +63,27 @@ export default function EmployeeAttendancePage() {
   const [submitting, setSubmitting] = useState(false);
   const [monthlyAttendance, setMonthlyAttendance] = useState<AttendanceRecord[]>([]);
   const [employeeId, setEmployeeId] = useState<string | null>(null);
+  
+  // Add month/year selection state
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
+  
+  // Year and month options
+  const yearOptions = [2024, 2025, 2026, 2027];
+  const monthOptions = [
+    { value: 1, label: "January" },
+    { value: 2, label: "February" },
+    { value: 3, label: "March" },
+    { value: 4, label: "April" },
+    { value: 5, label: "May" },
+    { value: 6, label: "June" },
+    { value: 7, label: "July" },
+    { value: 8, label: "August" },
+    { value: 9, label: "September" },
+    { value: 10, label: "October" },
+    { value: 11, label: "November" },
+    { value: 12, label: "December" },
+  ];
 
   // Initialize and update current time
   useEffect(() => {
@@ -128,20 +150,19 @@ export default function EmployeeAttendancePage() {
     }
   }, []);
 
-  // Fetch monthly attendance
-  const fetchMonthlyAttendance = useCallback(async (empId: string) => {
+  // Fetch monthly attendance for selected month/year
+  const fetchMonthlyAttendance = useCallback(async (empId: string, year: number, month: number) => {
     try {
-      // Use UTC month boundaries
-      const now = new Date();
-      const firstDayOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
-      const lastDayOfMonth = new Date(Date.UTC(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999));
+      // Use selected month/year instead of current month
+      const firstDayOfMonth = new Date(Date.UTC(year, month - 1, 1));
+      const lastDayOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
 
       const res = await fetch(
         `/api/attendance?employeeId=${empId}&startDate=${firstDayOfMonth.toISOString()}&endDate=${lastDayOfMonth.toISOString()}`
       );
       const data = await res.json();
 
-      if (data.attendanceRecords) {
+      if (data.attendanceRecords && Array.isArray(data.attendanceRecords)) {
         const formatted = data.attendanceRecords.map((record: any) => {
           const date = new Date(record.date);
           const checkIn = record.checkIn ? new Date(record.checkIn) : null;
@@ -166,6 +187,8 @@ export default function EmployeeAttendancePage() {
           };
         });
         setMonthlyAttendance(formatted);
+      } else {
+        setMonthlyAttendance([]);
       }
       setLoading(false);
     } catch (error) {
@@ -181,14 +204,22 @@ export default function EmployeeAttendancePage() {
       if (empId) {
         await Promise.all([
           fetchTodayAttendance(empId),
-          fetchMonthlyAttendance(empId),
+          fetchMonthlyAttendance(empId, selectedYear, selectedMonth),
         ]);
       } else {
         setLoading(false);
       }
     };
     loadData();
-  }, [fetchEmployeeId, fetchTodayAttendance, fetchMonthlyAttendance]);
+  }, [fetchEmployeeId, fetchTodayAttendance, fetchMonthlyAttendance, selectedYear, selectedMonth]);
+
+  // Reload monthly data when month/year changes
+  useEffect(() => {
+    if (employeeId) {
+      setLoading(true);
+      fetchMonthlyAttendance(employeeId, selectedYear, selectedMonth);
+    }
+  }, [selectedYear, selectedMonth, employeeId, fetchMonthlyAttendance]);
 
   const handleCheckIn = async () => {
     if (!employeeId) return;
@@ -222,13 +253,22 @@ export default function EmployeeAttendancePage() {
 
         // Refresh data in background without blocking UI
         if (employeeId) {
-          fetchMonthlyAttendance(employeeId);
+          fetchMonthlyAttendance(employeeId, selectedYear, selectedMonth);
           fetchTodayAttendance(employeeId);
         }
       } else {
         // Rollback on error
         const error = await res.json();
-        alert(error.error || "Failed to check in");
+        
+        // Show detailed error message
+        if (error.error && error.error.includes("leave")) {
+          // Special handling for leave error
+          const leaveType = error.leaveType || "leave";
+          alert(`❌ Cannot Mark Attendance\n\nYou are on approved ${leaveType.toLowerCase()} today.\n\nPlease contact HR if this is incorrect.`);
+        } else {
+          alert(error.error || "Failed to check in");
+        }
+        
         setIsCheckedIn(prevIsCheckedIn);
         setIsCheckedOut(prevIsCheckedOut);
         setCheckInTime(prevCheckInTime);
@@ -273,7 +313,7 @@ export default function EmployeeAttendancePage() {
 
         // Refresh data in background without blocking UI
         if (employeeId) {
-          fetchMonthlyAttendance(employeeId);
+          fetchMonthlyAttendance(employeeId, selectedYear, selectedMonth);
           fetchTodayAttendance(employeeId);
         }
       } else {
@@ -440,53 +480,126 @@ export default function EmployeeAttendancePage() {
         </TabsList>
 
         <TabsContent value="daily">
-          <Card>
-            <CardHeader>
-              <CardTitle>Attendance History</CardTitle>
-              <CardDescription>Your recent attendance records</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {monthlyAttendance.map((record, index) => (
-                  <div
-                    key={index}
-                    className={`flex items-center justify-between p-4 rounded-lg ${record.status === "weekend" || record.status === "holiday"
-                      ? "bg-muted/30"
-                      : "bg-muted/50"
-                      }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="text-center min-w-15">
-                        <p className="text-lg font-bold">{new Date(record.date).getDate()}</p>
-                        <p className="text-xs text-muted-foreground">{new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' })}</p>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          {getStatusBadge(record.status)}
-                        </div>
-                        {record.checkIn && (
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {record.checkIn} - {record.checkOut || "Working..."}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{record.hours}</p>
-                      <p className="text-xs text-muted-foreground">Hours</p>
-                    </div>
+          <div className="space-y-4">
+            {/* Month/Year Selectors */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Select Month & Year
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium">Month</label>
+                    <Select value={selectedMonth.toString()} onValueChange={(v) => setSelectedMonth(parseInt(v))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map((month) => (
+                          <SelectItem key={month.value} value={month.value.toString()}>
+                            {month.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="flex-1">
+                    <label className="text-sm font-medium">Year</label>
+                    <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(parseInt(v))}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {yearOptions.map((year) => (
+                          <SelectItem key={year} value={year.toString()}>
+                            {year}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Showing {monthOptions.find(m => m.value === selectedMonth)?.label} {selectedYear} 
+                  {monthlyAttendance.length > 0 && ` - ${monthlyAttendance.length} records found`}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Attendance History */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Attendance History</CardTitle>
+                <CardDescription>Your attendance records for {monthOptions.find(m => m.value === selectedMonth)?.label} {selectedYear}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <span className="ml-2">Loading attendance data...</span>
+                  </div>
+                ) : monthlyAttendance.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No attendance records found for this period</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {monthlyAttendance.map((record, index) => (
+                      <div
+                        key={index}
+                        className={`flex items-center justify-between p-4 rounded-lg ${record.status === "weekend" || record.status === "holiday"
+                          ? "bg-muted/30"
+                          : "bg-muted/50"
+                          }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="text-center min-w-15">
+                            <p className="text-lg font-bold">{new Date(record.date).getDate()}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(record.status)}
+                            </div>
+                            {record.checkIn && (
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {record.checkIn} - {record.checkOut || "Working..."}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">{record.hours}</p>
+                          <p className="text-xs text-muted-foreground">Hours</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="monthly">
-          <AttendanceCalendar attendanceData={monthlyAttendance.map(record => ({
-            date: record.date,
-            status: record.status.toUpperCase().replace('-', '_')
-          }))} />
+          {/* Attendance Calendar */}
+          {loading ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span className="ml-2">Loading attendance data...</span>
+              </CardContent>
+            </Card>
+          ) : (
+            <AttendanceCalendar attendanceData={monthlyAttendance.map(record => ({
+              date: record.date,
+              status: record.status // Keep original status format
+            }))} />
+          )}
         </TabsContent>
       </Tabs>
 

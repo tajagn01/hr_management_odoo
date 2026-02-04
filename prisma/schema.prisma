@@ -121,6 +121,7 @@ model Attendance {
   checkIn     DateTime?
   checkOut    DateTime?
   workingHours Float?            // Working hours calculated on checkout
+  autoMarked  Boolean           @default(false) // Flag to indicate auto-marked attendance
 
   employee    Employee           @relation(fields: [employeeId], references: [id])
 
@@ -132,6 +133,22 @@ model Attendance {
   @@index([date, employeeId]) // Optimized for reverse chronological queries
   @@index([date])
   @@index([status])
+}
+
+//////////////////////////////////////////////////
+// ATTENDANCE CONFIGURATION
+//////////////////////////////////////////////////
+
+model AttendanceConfig {
+  id              String   @id @default(uuid())
+  date            DateTime @unique // The date for which this config applies
+  autoMarkedToday Boolean  @default(false) // Whether auto-marking was done today
+  lockManualEntry Boolean  @default(false) // Whether to prevent manual attendance entry
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([date])
 }
 
 //////////////////////////////////////////////////

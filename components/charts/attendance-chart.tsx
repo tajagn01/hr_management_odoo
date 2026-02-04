@@ -2,29 +2,96 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "lucide-react";
 
 // New: Attendance trends (Daily) — recreated from scratch
 export function AttendanceChart() {
-  // Default to January 2026 as requested
-  const DEFAULT_YEAR = 2026;
-  const DEFAULT_MONTH = 1; // January
+  // Automatically use current month and year
+  const now = new Date();
+  const DEFAULT_YEAR = now.getFullYear();
+  const DEFAULT_MONTH = now.getMonth() + 1; // JavaScript months are 0-indexed
 
-  const [year] = useState<number>(DEFAULT_YEAR);
-  const [month] = useState<number>(DEFAULT_MONTH);
+  const [year, setYear] = useState<number>(DEFAULT_YEAR);
+  const [month, setMonth] = useState<number>(DEFAULT_MONTH);
   const [loading, setLoading] = useState(true);
   const [rawRecords, setRawRecords] = useState<any[]>([]);
+  const [totalEmployees, setTotalEmployees] = useState<number>(0);
+
+  // Generate year options (current year and 2 years back)
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+  }, []);
+
+  // Month options
+  const monthOptions = [
+    { value: 1, label: "January" },
+    { value: 2, label: "February" },
+    { value: 3, label: "March" },
+    { value: 4, label: "April" },
+    { value: 5, label: "May" },
+    { value: 6, label: "June" },
+    { value: 7, label: "July" },
+    { value: 8, label: "August" },
+    { value: 9, label: "September" },
+    { value: 10, label: "October" },
+    { value: 11, label: "November" },
+    { value: 12, label: "December" },
+  ];
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
     const fetchMonthly = async () => {
       try {
-        const res = await fetch(`/api/attendance/monthly?year=${year}&month=${month}`);
-        if (!res.ok) throw new Error("Failed to fetch monthly attendance");
+        // Calculate date range for the selected month
+        const startDate = new Date(year, month - 1, 1); // First day of month
+        const endDate = new Date(year, month, 0); // Last day of month
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+
+        console.log(`📅 Fetching attendance for ${year}-${month}:`, {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        });
+
+        // Fetch attendance records directly for the month
+        const res = await fetch(
+          `/api/attendance?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}&_t=${Date.now()}`,
+          { cache: 'no-store' }
+        );
+        if (!res.ok) throw new Error("Failed to fetch attendance");
         const json = await res.json();
-        if (mounted) setRawRecords(json.monthlyRecords || []);
+        
+        console.log(`📊 Received ${json.attendanceRecords?.length || 0} attendance records`);
+        
+        // Log first few records to debug
+        if (json.attendanceRecords && json.attendanceRecords.length > 0) {
+          console.log('Sample records:', json.attendanceRecords.slice(0, 3).map((r: any) => ({
+            date: r.date,
+            status: r.status,
+            day: new Date(r.date).getDate()
+          })));
+        }
+        
+        // Fetch total employee count (excluding managers/admins)
+        const empRes = await fetch("/api/employees?excludeManagers=true");
+        const empJson = await empRes.json();
+        const totalEmpCount = empJson?.totalCount || empJson?.employees?.length || 0;
+        
+        console.log(`👥 Total employees: ${totalEmpCount}`);
+        
+        if (mounted) {
+          setRawRecords(json.attendanceRecords || []);
+          setTotalEmployees(totalEmpCount);
+        }
       } catch (err) {
-        console.error(err);
-        if (mounted) setRawRecords([]);
+        console.error('❌ Error fetching attendance:', err);
+        if (mounted) {
+          setRawRecords([]);
+          setTotalEmployees(0);
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -34,75 +101,158 @@ export function AttendanceChart() {
     return () => { mounted = false; };
   }, [year, month]);
 
-  // Build a stable list of days for January 2026 (1..31)
-  const daysInMonth = 31; // Jan always 31
+  // Build a stable list of days for the current month
+  const daysInMonth = useMemo(() => {
+    return new Date(year, month, 0).getDate(); // Get actual days in the month
+  }, [year, month]);
+  
   const baselineDays = useMemo(() => {
     return Array.from({ length: daysInMonth }, (_, i) => ({
       day: (i + 1).toString(),
       attendance: 0,
     }));
-  }, []);
+  }, [daysInMonth]);
 
   // Aggregate present counts per day and convert to percentage
   const data = useMemo(() => {
     if (!rawRecords || rawRecords.length === 0) return baselineDays;
 
-    // Count employees from records; fall back to 1 to avoid division by zero
-    const employeeCount = rawRecords.length || 1;
+    // Use total employee count from API
+    const employeeCount = totalEmployees > 0 ? totalEmployees : 1;
 
     // Initialize counters for each day
     const counts = new Array(daysInMonth).fill(0);
 
-    // rawRecords expected to contain per-employee dayWiseData array with { date, status }
-    rawRecords.forEach((rec: any) => {
-      const dayWise = rec.dayWiseData || [];
-      if (!Array.isArray(dayWise)) return;
-      dayWise.forEach((dw: any) => {
-        if (!dw || !dw.date) return;
-        const parts = dw.date.split("-");
-        const d = parseInt(parts[2], 10);
-        if (!isNaN(d) && d >= 1 && d <= daysInMonth) {
-          const status = (dw.status || '').toString().toUpperCase();
-          if (status === 'PRESENT' || status === 'P' || status === 'CHECKED_IN') {
-            counts[d - 1] += 1;
-          }
+    // Process raw attendance records
+    // Each record has: { date, status, employeeId, checkIn, checkOut }
+    rawRecords.forEach((record: any) => {
+      if (!record || !record.date) return;
+      
+      const recordDate = new Date(record.date);
+      const day = recordDate.getDate();
+      
+      if (day >= 1 && day <= daysInMonth) {
+        const status = (record.status || '').toString().toUpperCase();
+        // Count as present if status is PRESENT, LATE, or HALF_DAY
+        if (status === 'PRESENT' || status === 'LATE' || status === 'HALF_DAY') {
+          counts[day - 1] += 1;
         }
-      });
+      }
     });
 
     // Convert to percentage, clamp between 0 and 100
-    return counts.map((c, idx) => {
+    const chartData = counts.map((c, idx) => {
       const pct = Math.round((c / employeeCount) * 100);
       return {
         day: (idx + 1).toString(),
         attendance: Math.max(0, Math.min(100, pct)),
       };
     });
-  }, [rawRecords, baselineDays]);
+
+    // Debug logging
+    console.log(`📊 Chart Data for ${year}-${month}:`, {
+      totalRecords: rawRecords.length,
+      totalEmployees: employeeCount,
+      daysInMonth,
+      sampleCounts: counts.slice(0, 5),
+      sampleChartData: chartData.slice(0, 5)
+    });
+
+    return chartData;
+  }, [rawRecords, baselineDays, daysInMonth, totalEmployees, year, month]);
 
   if (loading) {
     return (
-      <div className="w-full h-80 flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">Loading attendance trends...</p>
+      <div className="w-full">
+        <div className="flex items-center gap-2 mb-4">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Select value={month.toString()} onValueChange={(v) => setMonth(parseInt(v))}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map((m) => (
+                <SelectItem key={m.value} value={m.value.toString()}>
+                  {m.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={year.toString()} onValueChange={(v) => setYear(parseInt(v))}>
+            <SelectTrigger className="w-[100px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={y.toString()}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-full h-80 flex items-center justify-center">
+          <p className="text-muted-foreground text-sm">Loading attendance trends...</p>
+        </div>
       </div>
     );
   }
 
+  const monthName = new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
   return (
-    <div className="w-full h-80">
-      <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-        <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 6 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-          <XAxis dataKey="day" tick={{ fontSize: 11 }} />
-          <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
-          <Tooltip
-            formatter={(value: any) => `${value}%`}
-            contentStyle={{ backgroundColor: 'transparent', border: 'none', boxShadow: 'none' }}
-            wrapperStyle={{ pointerEvents: 'none' }}
-          />
-          <Bar dataKey="attendance" fill="#3b82f6" />
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="w-full">
+      <div className="flex items-center gap-2 mb-4">
+        <Calendar className="h-4 w-4 text-muted-foreground" />
+        <Select value={month.toString()} onValueChange={(v) => setMonth(parseInt(v))}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {monthOptions.map((m) => (
+              <SelectItem key={m.value} value={m.value.toString()}>
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={year.toString()} onValueChange={(v) => setYear(parseInt(v))}>
+          <SelectTrigger className="w-[100px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {yearOptions.map((y) => (
+              <SelectItem key={y} value={y.toString()}>
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+          <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 6 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+            <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+            <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+            <Tooltip
+              formatter={(value: any) => [`${value}%`, 'Attendance']}
+              contentStyle={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+                border: '1px solid rgba(0, 0, 0, 0.1)', 
+                borderRadius: '6px',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                color: '#000000',
+                padding: '8px'
+              }}
+              labelStyle={{ color: '#000000' }}
+              itemStyle={{ color: '#000000' }}
+              wrapperStyle={{ pointerEvents: 'none' }}
+            />
+            <Bar dataKey="attendance" fill="#3b82f6" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

@@ -32,7 +32,8 @@ import {
 } from "lucide-react";
 
 // Memoize sub-components to prevent re-renders on parent state changes
-const MemoizedAttendanceChart = memo(AttendanceChart);
+// Temporarily disabled AttendanceChart memo to force tooltip update
+// const MemoizedAttendanceChart = memo(AttendanceChart);
 const MemoizedDepartmentChart = memo(DepartmentChart);
 const MemoizedAttendancePieChart = memo(AttendancePieChart);
 const MemoizedPayrollChart = memo(PayrollChart);
@@ -61,11 +62,11 @@ export default function AdminPage() {
     return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1));
   }, [today]);
 
-  // 1. Fetch Employees
+  // 1. Fetch Employees (excluding managers/admins for dashboard stats)
   const { data: employeesData } = useQuery({
-    queryKey: ['employees', 'with-payroll'],
+    queryKey: ['employees', 'with-payroll', 'exclude-managers'],
     queryFn: async () => {
-      const res = await fetch("/api/employees?includePayroll=true");
+      const res = await fetch("/api/employees?includePayroll=true&excludeManagers=true");
       return res.json();
     },
     // Use keepPreviousData to show stale data while refetching if needed (rare due to Infinity staleTime)
@@ -189,7 +190,7 @@ export default function AdminPage() {
     const minDelay = new Promise(resolve => setTimeout(resolve, 800));
 
     await Promise.all([
-      queryClient.refetchQueries({ queryKey: ['employees', 'with-payroll'] }),
+      queryClient.refetchQueries({ queryKey: ['employees', 'with-payroll', 'exclude-managers'] }),
       // Refetch all attendance queries (dashboard stats, yearly chart, etc.)
       // Refetch all attendance queries (dashboard stats, yearly chart, etc.)
       queryClient.refetchQueries({ queryKey: ['attendance'] }),
@@ -576,7 +577,7 @@ export default function AdminPage() {
                 <CardDescription>Monthly attendance and leave patterns</CardDescription>
               </CardHeader>
               <CardContent>
-                <MemoizedAttendanceChart />
+                <AttendanceChart />
               </CardContent>
             </Card>
             <Card className="col-span-3">

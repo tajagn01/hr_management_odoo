@@ -107,8 +107,8 @@ export async function GET(request: NextRequest) {
         }),
         prisma.attendance.findMany({
           where,
-          orderBy: { date: "desc" },
-          take: 100
+          orderBy: { date: "asc" }, // Changed to ascending for chronological order
+          // Removed take limit for date-range queries to get all records
         })
       ]);
 
@@ -132,9 +132,9 @@ export async function GET(request: NextRequest) {
           },
         },
         orderBy: {
-          date: "desc",
+          date: "asc", // Changed to ascending for chronological order
         },
-        take: 100, // Limit results
+        // Removed take limit for date-range queries to get all records
       });
     }
 
@@ -181,6 +181,41 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    // Check if employee has an approved leave for today
+    const approvedLeave = await prisma.leaveRequest.findFirst({
+      where: {
+        employeeId,
+        status: 'APPROVED',
+        startDate: { lte: todayEnd },
+        endDate: { gte: today }
+      }
+    });
+
+    if (approvedLeave) {
+      return NextResponse.json({ 
+        error: "You cannot mark attendance. You are on approved leave today.",
+        leaveType: approvedLeave.type,
+        leaveDates: {
+          start: approvedLeave.startDate,
+          end: approvedLeave.endDate
+        }
+      }, { status: 400 });
+    }
+
+    // Check if manual attendance is locked due to auto-marking
+    const attendanceConfig = await prisma.attendanceConfig.findUnique({
+      where: { date: today }
+    });
+
+    if (attendanceConfig?.lockManualEntry) {
+      return NextResponse.json({ 
+        error: "Manual attendance is locked. Attendance has been automatically marked for today.",
+        autoMarked: true
+      }, { status: 400 });
+    }
 
     // Check if attendance record exists for today
     let attendance = await prisma.attendance.findUnique({

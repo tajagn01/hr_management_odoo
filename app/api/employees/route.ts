@@ -65,8 +65,16 @@ export async function GET(request: NextRequest) {
     // 3. Get List (Cached)
     let employees;
     if (user.role === "ADMIN") {
+      // Check if we should exclude managers/admins from the list
+      const excludeManagers = searchParams.get("excludeManagers") === "true";
+      
       // Use direct DB call to ensure fresh data for admins (bypassing cache issues)
       employees = await prisma.employee.findMany({
+        where: excludeManagers ? {
+          user: {
+            role: "EMPLOYEE" // Only show regular employees, exclude MANAGER and ADMIN
+          }
+        } : undefined,
         select: {
           id: true,
           fullName: true,

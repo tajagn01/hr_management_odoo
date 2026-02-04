@@ -9,7 +9,12 @@
     "start": "cross-env NODE_ENV=production node server.js",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "auto-mark": "tsx scripts/auto-mark-attendance.ts",
+    "test-auto-mark": "tsx scripts/test-auto-mark.ts",
+    "start-scheduler": "node scripts/attendance-scheduler.js",
+    "clear-attendance": "tsx scripts/clear-attendance.ts",
+    "seed-january": "tsx seed-january-data.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -47,6 +52,7 @@
     "next": "16.1.1",
     "next-auth": "^5.0.0-beta.30",
     "next-themes": "^0.4.6",
+    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.12",
     "pg": "^8.16.3",
     "pino": "^10.3.0",
