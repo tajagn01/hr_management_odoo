@@ -117,15 +117,26 @@ export async function calculateAttendanceStatus(
     const checkInTime = new Date(attendance.checkIn);
     const [hours, minutes] = config.officeStartTime.split(':').map(Number);
 
-    // Construct office start time for THIS specific day
-    const officeStart = new Date(date);
-    officeStart.setHours(hours, minutes, 0, 0);
+    // IST is UTC+5:30, so 9:00 AM IST = 3:30 AM UTC
+    // Construct office start time in IST for THIS specific day
+    const IST_OFFSET_HOURS = 5;
+    const IST_OFFSET_MINUTES = 30;
+
+    // Create office start time in UTC by subtracting IST offset from the IST office time
+    const officeStart = new Date(Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        hours - IST_OFFSET_HOURS,  // Convert IST hour to UTC
+        minutes - IST_OFFSET_MINUTES, // Convert IST minutes to UTC
+        0,
+        0
+    ));
 
     const graceEndTime = new Date(officeStart);
     graceEndTime.setMinutes(graceEndTime.getMinutes() + config.gracePeriodMinutes);
 
     // If check-in is later than grace period end time -> LATE
-    // Note: We compare timestamps to handle timezone correctly if dates are properly instantiated
     if (checkInTime.getTime() > graceEndTime.getTime()) {
         return AttendanceState.LATE;
     }
@@ -193,10 +204,24 @@ export async function getBulkAttendanceStatus(
     approvedLeaves.forEach(l => leaveMap.add(l.employeeId));
 
     // 4. In-Memory Calculation (O(N) but extremely fast)
-    // Pre-calculate office times for lateness logic
+    // Pre-calculate office times for lateness logic in IST
     const [hours, minutes] = config.officeStartTime.split(':').map(Number);
-    const officeStart = new Date(date);
-    officeStart.setHours(hours, minutes, 0, 0);
+
+    // IST is UTC+5:30, so 9:00 AM IST = 3:30 AM UTC
+    const IST_OFFSET_HOURS = 5;
+    const IST_OFFSET_MINUTES = 30;
+
+    // Create office start time in UTC by subtracting IST offset
+    const officeStart = new Date(Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        hours - IST_OFFSET_HOURS,
+        minutes - IST_OFFSET_MINUTES,
+        0,
+        0
+    ));
+
     const graceEndTime = new Date(officeStart);
     graceEndTime.setMinutes(graceEndTime.getMinutes() + config.gracePeriodMinutes);
     const graceTimeMs = graceEndTime.getTime();

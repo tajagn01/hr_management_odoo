@@ -82,11 +82,12 @@ async function autoMarkAttendance() {
             if (randomValue <= 0.70) {
                 // 70% chance - PRESENT
                 status = 'PRESENT';
+                // 9:00 AM IST = 3:30 AM UTC (IST is UTC+5:30)
                 checkIn = new Date(startOfToday);
-                checkIn.setUTCHours(9, Math.floor(Math.random() * 30), 0, 0); // 9:00-9:30 AM UTC
+                checkIn.setUTCHours(3, 30 + Math.floor(Math.random() * 30), 0, 0); // 9:00-9:30 AM IST
 
                 checkOut = new Date(startOfToday);
-                checkOut.setUTCHours(17, Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM UTC
+                checkOut.setUTCHours(11, 30 + Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM IST
 
                 workingHours = 8.0;
             } else if (randomValue <= 0.90) {
@@ -98,11 +99,12 @@ async function autoMarkAttendance() {
             } else {
                 // 10% chance - LATE
                 status = 'LATE';
+                // Late arrivals: 9:45-10:15 AM IST = 4:15-4:45 AM UTC
                 checkIn = new Date(startOfToday);
-                checkIn.setUTCHours(9, 45 + Math.floor(Math.random() * 30), 0, 0); // 9:45-10:15 AM UTC (late)
+                checkIn.setUTCHours(4, 15 + Math.floor(Math.random() * 30), 0, 0); // 9:45-10:15 AM IST (late)
 
                 checkOut = new Date(startOfToday);
-                checkOut.setUTCHours(17, Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM UTC
+                checkOut.setUTCHours(11, 30 + Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM IST
 
                 workingHours = 7.5; // Slightly less hours due to late arrival
             }
