@@ -12,7 +12,7 @@ const prisma = new PrismaClient();
  */
 async function autoMarkAttendance() {
     const now = new Date();
-    
+
     // Skip if it's Sunday (day 0)
     if (now.getDay() === 0) {
         console.log("🚫 Skipping attendance marking - Sunday is a holiday");
@@ -28,9 +28,9 @@ async function autoMarkAttendance() {
     console.log(`📅 Auto-marking attendance for ${now.toDateString()}...`);
 
     try {
-        // Get start and end of today
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        // Get start and end of today (using UTC for consistency across timezones)
+        const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+        const endOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
 
         // First, check if ANYONE has made attendance today
         const anyAttendanceToday = await prisma.attendance.findFirst({
@@ -52,7 +52,7 @@ async function autoMarkAttendance() {
 
         // Get all active employees
         const employees = await prisma.employee.findMany({
-            include: { 
+            include: {
                 user: true
             }
         });
@@ -65,7 +65,7 @@ async function autoMarkAttendance() {
         for (const employee of employees) {
             // Check if employee is on leave for today
             const isOnLeave = await checkIfEmployeeOnLeave(employee.id, startOfToday);
-            
+
             if (isOnLeave) {
                 console.log(`   🏖️ ${employee.fullName}: On leave today`);
                 skippedCount++;
@@ -83,11 +83,11 @@ async function autoMarkAttendance() {
                 // 70% chance - PRESENT
                 status = 'PRESENT';
                 checkIn = new Date(startOfToday);
-                checkIn.setHours(9, Math.floor(Math.random() * 30), 0, 0); // 9:00-9:30 AM
-                
+                checkIn.setUTCHours(9, Math.floor(Math.random() * 30), 0, 0); // 9:00-9:30 AM UTC
+
                 checkOut = new Date(startOfToday);
-                checkOut.setHours(17, Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM
-                
+                checkOut.setUTCHours(17, Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM UTC
+
                 workingHours = 8.0;
             } else if (randomValue <= 0.90) {
                 // 20% chance - ABSENT (no check-in/out)
@@ -99,11 +99,11 @@ async function autoMarkAttendance() {
                 // 10% chance - LATE
                 status = 'LATE';
                 checkIn = new Date(startOfToday);
-                checkIn.setHours(9, 45 + Math.floor(Math.random() * 30), 0, 0); // 9:45-10:15 AM (late)
-                
+                checkIn.setUTCHours(9, 45 + Math.floor(Math.random() * 30), 0, 0); // 9:45-10:15 AM UTC (late)
+
                 checkOut = new Date(startOfToday);
-                checkOut.setHours(17, Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM
-                
+                checkOut.setUTCHours(17, Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM UTC
+
                 workingHours = 7.5; // Slightly less hours due to late arrival
             }
 
@@ -160,7 +160,7 @@ async function checkIfEmployeeOnLeave(employeeId: string, date: Date): Promise<b
     // TODO: Implement leave checking logic
     // For now, return false (no one is on leave)
     // You might have a Leave model or check attendance status for LEAVE
-    
+
     // Example implementation:
     // const leaveRecord = await prisma.leave.findFirst({
     //     where: {
@@ -171,7 +171,7 @@ async function checkIfEmployeeOnLeave(employeeId: string, date: Date): Promise<b
     //     }
     // });
     // return !!leaveRecord;
-    
+
     return false;
 }
 

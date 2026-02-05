@@ -40,11 +40,11 @@ async function markTodayAttendance() {
             // Create 'PRESENT' record
             // Randomize check-in slightly
             const checkIn = new Date("2026-01-25T09:00:00.000Z");
-            checkIn.setMinutes(Math.floor(Math.random() * 30)); // 9:00 - 9:30
+            checkIn.setUTCMinutes(Math.floor(Math.random() * 30)); // 9:00 - 9:30 UTC
 
             // Randomize check-out
             const checkOut = new Date("2026-01-25T17:00:00.000Z");
-            checkOut.setMinutes(Math.floor(Math.random() * 60)); // 17:00 - 18:00
+            checkOut.setUTCMinutes(Math.floor(Math.random() * 60)); // 17:00 - 18:00 UTC
 
             // 14% chance of being absent or leave (to match seed distribution)
             const rand = Math.random();

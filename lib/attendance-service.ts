@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma';
-import { startOfDay, endOfDay } from 'date-fns';
 
 export enum AttendanceState {
     PRESENT = 'PRESENT',
@@ -58,8 +57,9 @@ export async function calculateAttendanceStatus(
     date: Date
 ): Promise<AttendanceState> {
     const config = await getCompanyConfig();
-    const dayStart = startOfDay(date);
-    const dayEnd = endOfDay(date);
+    // Use UTC to ensure consistency across timezones (localhost vs deployment)
+    const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+    const dayEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 
     // 1. Check if HOLIDAY (Sunday or company holiday)
     const dayOfWeek = date.getDay(); // 0 = Sunday
@@ -152,8 +152,9 @@ export async function getBulkAttendanceStatus(
     if (employeeIds.length === 0) return [];
 
     const config = await getCompanyConfig();
-    const dayStart = startOfDay(date);
-    const dayEnd = endOfDay(date);
+    // Use UTC to ensure consistency across timezones (localhost vs deployment)
+    const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+    const dayEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 
     // 1. Check Holiday (O(1) query)
     const dayOfWeek = date.getDay();
