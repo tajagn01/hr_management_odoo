@@ -87,42 +87,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const email = user.email!;
 
           // Check if user exists
-          let existingUser = await prisma.user.findUnique({
+          const existingUser = await prisma.user.findUnique({
             where: { email },
             include: { employee: true },
           });
 
           if (!existingUser) {
-            // Create new user with Google OAuth
-            logger.info("Creating new user via Google OAuth", { email });
-
-            const employeeCount = await prisma.employee.count();
-            const employeeCode = `EMP${String(employeeCount + 1).padStart(4, "0")}`;
-
-            existingUser = await prisma.user.create({
-              data: {
-                email,
-                password: "", // No password for OAuth users
-                role: "EMPLOYEE",
-                isActive: true,
-                emailVerified: true, // Google OAuth emails are pre-verified
-                employee: {
-                  create: {
-                    employeeCode,
-                    fullName: user.name || email,
-                    designation: "Employee",
-                    department: "General",
-                    joiningDate: new Date(),
-                  },
-                },
-              },
-              include: { employee: true },
-            });
-
-            logger.info("User created via Google OAuth", { email, employeeCode });
-          } else {
-            logger.info("Existing user logged in via Google OAuth", { email });
+            // Block login if account doesn't exist
+            logger.warn("Google login attempt without existing account", { email });
+            throw new Error("Please sign up first before using Google login. No account found for this email address.");
           }
+
+          // Check if account is active
+          if (!existingUser.isActive) {
+            logger.warn("Google login attempt with inactive account", { email });
+            throw new Error("Your account is inactive. Please contact the administrator.");
+          }
+
+          logger.info("Existing user logged in via Google OAuth", { email });
 
           // Attach user data to the user object for JWT callback
           (user as any).id = existingUser.id;
