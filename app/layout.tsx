@@ -22,7 +22,19 @@ const outfit = Outfit({
 
 export const metadata: Metadata = {
   title: "DayFlow HRMS",
-  description: "Modern HR Management System",
+  description: "Modern HR Management System - Employee management, attendance tracking, leave management, and payroll processing",
+  openGraph: {
+    title: "DayFlow - HR Management System",
+    description: "Modern HR Management System with attendance tracking, leave management, and payroll",
+    images: ["/og-image.png"],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "DayFlow - HR Management System",
+    description: "Modern HR Management System with attendance tracking, leave management, and payroll",
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({
