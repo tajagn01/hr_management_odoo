@@ -92,8 +92,15 @@ async function seedFebruaryAttendance() {
                     dayLate++;
                 }
 
-                await prisma.attendance.create({
-                    data: {
+                await prisma.attendance.upsert({
+                    where: {
+                        employeeId_date: {
+                            employeeId: employee.id,
+                            date: dayStart
+                        }
+                    },
+                    update: {}, // Don't update if exists
+                    create: {
                         employeeId: employee.id,
                         date: dayStart,
                         status: status,

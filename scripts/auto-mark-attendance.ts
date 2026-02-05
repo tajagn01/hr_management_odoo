@@ -109,15 +109,22 @@ async function autoMarkAttendance() {
                 workingHours = 7.5; // Slightly less hours due to late arrival
             }
 
-            await prisma.attendance.create({
-                data: {
+            await prisma.attendance.upsert({
+                where: {
+                    employeeId_date: {
+                        employeeId: employee.id,
+                        date: startOfToday
+                    }
+                },
+                update: {}, // Don't update if already exists (manual entry takes precedence)
+                create: {
                     employeeId: employee.id,
                     date: startOfToday,
                     status: status,
                     checkIn: checkIn,
                     checkOut: checkOut,
                     workingHours: workingHours,
-                    autoMarked: true // Flag to indicate this was auto-marked
+                    autoMarked: true
                 }
             });
 

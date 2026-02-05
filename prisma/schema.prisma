@@ -127,6 +127,7 @@ model Attendance {
 
   createdAt   DateTime           @default(now())
 
+  // Prevent duplicate attendance records for same employee on same day
   @@unique([employeeId, date])
   @@index([employeeId])
   @@index([employeeId, date]) // existing
