@@ -2,6 +2,10 @@
 
 A modern HR management system built with Next.js 16, featuring employee management, attendance tracking, leave management, and payroll processing.
 
+## 📊 Project Overview
+
+**[View Interactive System Diagram →](https://excalidraw.com/#json=zLcASc8DioYDfhfEkzu53,xFUg6gm4_S9GrA6VTdR90g)**
+
 ## Tech Stack
 
 - **Framework:** Next.js 16 (App Router)

@@ -63,9 +63,9 @@ export function AttendanceChart() {
         );
         if (!res.ok) throw new Error("Failed to fetch attendance");
         const json = await res.json();
-        
+
         console.log(`📊 Received ${json.attendanceRecords?.length || 0} attendance records`);
-        
+
         // Log first few records to debug
         if (json.attendanceRecords && json.attendanceRecords.length > 0) {
           console.log('Sample records:', json.attendanceRecords.slice(0, 3).map((r: any) => ({
@@ -74,14 +74,16 @@ export function AttendanceChart() {
             day: new Date(r.date).getDate()
           })));
         }
-        
-        // Fetch total employee count (excluding managers/admins)
-        const empRes = await fetch("/api/employees?excludeManagers=true");
+
+
+        // Fetch total employee count (ALL employees, not excluding managers)
+        // We need the TOTAL count to calculate attendance percentage correctly
+        const empRes = await fetch("/api/employees");
         const empJson = await empRes.json();
         const totalEmpCount = empJson?.totalCount || empJson?.employees?.length || 0;
-        
+
         console.log(`👥 Total employees: ${totalEmpCount}`);
-        
+
         if (mounted) {
           setRawRecords(json.attendanceRecords || []);
           setTotalEmployees(totalEmpCount);
@@ -105,7 +107,7 @@ export function AttendanceChart() {
   const daysInMonth = useMemo(() => {
     return new Date(year, month, 0).getDate(); // Get actual days in the month
   }, [year, month]);
-  
+
   const baselineDays = useMemo(() => {
     return Array.from({ length: daysInMonth }, (_, i) => ({
       day: (i + 1).toString(),
@@ -127,10 +129,10 @@ export function AttendanceChart() {
     // Each record has: { date, status, employeeId, checkIn, checkOut }
     rawRecords.forEach((record: any) => {
       if (!record || !record.date) return;
-      
+
       const recordDate = new Date(record.date);
       const day = recordDate.getDate();
-      
+
       if (day >= 1 && day <= daysInMonth) {
         const status = (record.status || '').toString().toUpperCase();
         // Count as present if status is PRESENT, LATE, or HALF_DAY
@@ -237,9 +239,9 @@ export function AttendanceChart() {
             <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
             <Tooltip
               formatter={(value: any) => [`${value}%`, 'Attendance']}
-              contentStyle={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.9)', 
-                border: '1px solid rgba(0, 0, 0, 0.1)', 
+              contentStyle={{
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                border: '1px solid rgba(0, 0, 0, 0.1)',
                 borderRadius: '6px',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
                 color: '#000000',
