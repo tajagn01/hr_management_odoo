@@ -9,12 +9,13 @@ export async function PATCH(request: Request) {
     try {
         const session = await auth();
 
-        if (!(session?.user as any)?.employeeId) {
+        if (!session?.user) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        const userId = (session.user as any).id;
         const body = await request.json();
-        logger.debug("Complete profile request", { employeeId: (session?.user as any)?.employeeId });
+        logger.debug("Complete profile request", { userId });
         const { fullName, dateOfBirth, phone, address, joiningDate, department, designation, managerId } = body;
 
         // Validate required fields
@@ -25,28 +26,64 @@ export async function PATCH(request: Request) {
             );
         }
 
-        // Update employee profile
-        const updatedEmployee = await prisma.employee.update({
-            where: { id: (session?.user as any)?.employeeId },
-            data: {
-                fullName,
-                dateOfBirth: new Date(dateOfBirth),
-                phone,
-                address,
-                joiningDate: new Date(joiningDate),
-                department,
-                designation,
-                managerId: managerId || undefined,
-                profileCompleted: true
-            }
+        // Check if employee profile exists
+        let employee = await prisma.employee.findUnique({
+            where: { userId }
         });
+
+        if (employee) {
+            // Update existing employee profile
+            employee = await prisma.employee.update({
+                where: { id: employee.id },
+                data: {
+                    fullName,
+                    dateOfBirth: new Date(dateOfBirth),
+                    phone,
+                    address,
+                    joiningDate: new Date(joiningDate),
+                    department,
+                    designation,
+                    managerId: managerId || null,
+                    profileCompleted: true
+                }
+            });
+        } else {
+            // Create new employee profile (for Google login users)
+            const lastEmployee = await prisma.employee.findFirst({
+                orderBy: { employeeCode: 'desc' }
+            });
+
+            // Generate next employee code
+            const lastCode = lastEmployee?.employeeCode || 'EMP000';
+            const lastNumber = parseInt(lastCode.replace('EMP', ''));
+            const newCode = `EMP${String(lastNumber + 1).padStart(3, '0')}`;
+
+            employee = await prisma.employee.create({
+                data: {
+                    userId,
+                    employeeCode: newCode,
+                    fullName,
+                    dateOfBirth: new Date(dateOfBirth),
+                    phone,
+                    address,
+                    joiningDate: new Date(joiningDate),
+                    department,
+                    designation,
+                    managerId: managerId || null,
+                    profileCompleted: true
+                }
+            });
+
+            logger.info("Created employee profile for Google user", { userId, employeeCode: newCode });
+        }
 
         // Invalidate cache
         revalidateTag(TAGS.employees, "max");
 
         return NextResponse.json({
             success: true,
-            employee: updatedEmployee
+            employee,
+            employeeId: employee.id
         });
     } catch (error) {
         logger.error("Error completing profile", error);

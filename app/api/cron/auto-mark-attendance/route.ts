@@ -97,13 +97,13 @@ export async function GET(request: NextRequest) {
 
             // Random attendance generation
             const randomValue = Math.random();
-            let status: 'PRESENT' | 'ABSENT' | 'LATE';
+            let status: 'PRESENT' | 'ABSENT' | 'HALF_DAY';
             let checkIn: Date | null = null;
             let checkOut: Date | null = null;
             let workingHours: number | null = null;
 
-            if (randomValue <= 0.70) {
-                // 70% PRESENT - 9:00 AM IST = 3:30 AM UTC
+            if (randomValue <= 0.75) {
+                // 75% PRESENT - 9:00 AM IST = 3:30 AM UTC
                 status = 'PRESENT';
                 checkIn = new Date(startOfToday);
                 checkIn.setUTCHours(3, 30 + Math.floor(Math.random() * 30), 0, 0); // 9:00-9:30 AM IST
@@ -111,23 +111,23 @@ export async function GET(request: NextRequest) {
                 checkOut = new Date(startOfToday);
                 checkOut.setUTCHours(11, 30 + Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM IST
 
-                workingHours = 8.0;
+                workingHours = 8.0 + Math.random() * 0.5; // 8.0-8.5 hours
             } else if (randomValue <= 0.90) {
-                // 20% ABSENT
+                // 15% ABSENT
                 status = 'ABSENT';
                 checkIn = null;
                 checkOut = null;
-                workingHours = 0;
+                workingHours = null;
             } else {
-                // 10% LATE - 9:45 AM IST = 4:15 AM UTC
-                status = 'LATE';
+                // 10% HALF_DAY
+                status = 'HALF_DAY';
                 checkIn = new Date(startOfToday);
-                checkIn.setUTCHours(4, 15 + Math.floor(Math.random() * 30), 0, 0); // 9:45-10:15 AM IST
+                checkIn.setUTCHours(3, 30 + Math.floor(Math.random() * 30), 0, 0); // 9:00-9:30 AM IST
 
                 checkOut = new Date(startOfToday);
-                checkOut.setUTCHours(11, 30 + Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM IST
+                checkOut.setUTCHours(7, Math.floor(Math.random() * 60), 0, 0); // 12:30-1:30 PM IST
 
-                workingHours = 7.5;
+                workingHours = 4.0 + Math.random() * 0.5; // 4.0-4.5 hours
             }
 
             await prisma.attendance.upsert({
@@ -141,13 +141,10 @@ export async function GET(request: NextRequest) {
                 create: {
                     employeeId: employee.id,
                     date: startOfToday,
-                    // @ts-ignore
                     status: status,
                     checkIn: checkIn,
                     checkOut: checkOut,
-                    // @ts-ignore
                     workingHours: workingHours,
-                    autoMarked: true
                 }
             });
 
@@ -158,20 +155,6 @@ export async function GET(request: NextRequest) {
                 autoMarked: true
             });
         }
-
-        // Lock manual entry for today
-        await prisma.attendanceConfig.upsert({
-            where: { date: startOfToday },
-            update: {
-                autoMarkedToday: true,
-                lockManualEntry: true
-            },
-            create: {
-                date: startOfToday,
-                autoMarkedToday: true,
-                lockManualEntry: true
-            }
-        });
 
         return NextResponse.json({
             message: 'Auto-attendance marking completed',

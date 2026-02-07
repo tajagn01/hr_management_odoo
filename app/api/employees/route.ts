@@ -38,9 +38,7 @@ export async function GET(request: NextRequest) {
     if (id) {
       const employee = await getEmployeeByIdCached(id);
       if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
-      return NextResponse.json({ employee }, {
-        headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=300" },
-      });
+      return NextResponse.json({ employee });
     }
 
     // 2. Get specific employee by Email
@@ -61,24 +59,14 @@ export async function GET(request: NextRequest) {
         role: userEnt.role
       };
 
-      return NextResponse.json({ employee: employeeData }, {
-        headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=300" },
-      });
+      return NextResponse.json({ employee: employeeData });
     }
 
     // 3. Get List (Cached)
     let employees;
     if (user.role === "ADMIN") {
-      // Check if we should exclude managers/admins from the list
-      const excludeManagers = searchParams.get("excludeManagers") === "true";
-      
       // Use direct DB call to ensure fresh data for admins (bypassing cache issues)
       employees = await prisma.employee.findMany({
-        where: excludeManagers ? {
-          user: {
-            role: "EMPLOYEE" // Only show regular employees, exclude MANAGER and ADMIN
-          }
-        } : undefined,
         select: {
           id: true,
           fullName: true,
@@ -88,7 +76,6 @@ export async function GET(request: NextRequest) {
           phone: true,
           joiningDate: true,
           profileImage: true,
-          profileCompleted: true,
           user: {
             select: {
               email: true,
@@ -117,9 +104,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized to view all employees" }, { status: 403 });
     }
 
-    return NextResponse.json({ employees, totalCount: employees.length }, {
-      headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=300" },
-    });
+    return NextResponse.json({ employees, totalCount: employees.length });
   } catch (error) {
     console.error("Error fetching employees:", error);
     return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 });

@@ -46,17 +46,6 @@ import {
 } from "@/components/ui/sheet";
 import { SidebarContent } from "@/components/sidebar";
 import { useNotifications } from "@/contexts/notification-context";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-
 
 // Dynamically import CommandMenu to prevent hydration mismatch
 const CommandMenu = dynamic(() => import("@/components/command-menu").then(mod => ({ default: mod.CommandMenu })), {
@@ -72,12 +61,11 @@ export default function Navbar() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [showClearDialog, setShowClearDialog] = useState(false);
   const isAdmin = pathname?.startsWith("/admin");
   const userRole = (session?.user as any)?.role || "EMPLOYEE";
 
   // Use real notifications from context
-  const { notifications, unreadCount, markAllAsRead, markAsRead, clearAllNotifications } = useNotifications();
+  const { notifications, unreadCount, markAllAsRead, markAsRead } = useNotifications();
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -95,15 +83,11 @@ export default function Navbar() {
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true);
-      // Use current origin to ensure correct redirect in production
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      await signOut({ callbackUrl: `${baseUrl}/`, redirect: true });
+      await signOut({ callbackUrl: "/login", redirect: true });
     } catch (error) {
       console.error("Logout error:", error);
-      // Force redirect to current origin
-      if (typeof window !== 'undefined') {
-        window.location.href = window.location.origin + "/";
-      }
+      // Force redirect even if signOut fails
+      window.location.href = "/login";
     } finally {
       setIsLoggingOut(false);
     }
@@ -293,17 +277,11 @@ export default function Navbar() {
                     )}
                   </div>
                 </ScrollArea>
-                {notifications.length > 0 && (
-                  <div className="border-t p-2">
-                    <Button
-                      variant="ghost"
-                      className="w-full text-sm text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-                      onClick={() => setShowClearDialog(true)}
-                    >
-                      Clear All
-                    </Button>
-                  </div>
-                )}
+                <div className="border-t p-2">
+                  <Button variant="ghost" className="w-full text-sm text-muted-foreground hover:text-foreground">
+                    View all notifications
+                  </Button>
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -392,30 +370,6 @@ export default function Navbar() {
           </div>
         </div>
       </header>
-
-      {/* Clear All Notifications Confirmation Dialog */}
-      <AlertDialog open={showClearDialog} onOpenChange={setShowClearDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Clear All Notifications?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to clear all notifications? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={async () => {
-                await clearAllNotifications();
-                setShowClearDialog(false);
-              }}
-            >
-              Clear All
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

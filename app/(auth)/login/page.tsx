@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -26,6 +26,16 @@ function LoginContent() {
   const [isDemoOpen, setIsDemoOpen] = useState(false);
 
   const registered = searchParams.get("registered");
+  const errorParam = searchParams.get("error");
+
+  // Set error message based on URL parameter
+  useEffect(() => {
+    if (errorParam === "AccountInactive") {
+      setError("Your account is inactive. Please contact the administrator.");
+    } else if (errorParam === "AuthError") {
+      setError("Authentication failed. Please try again.");
+    }
+  }, [errorParam]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,21 +229,21 @@ function LoginContent() {
                 </div>
               </button>
 
-              {/* Manager (Sarah) */}
+              {/* Manager (Alice Johnson) */}
               <button
                 type="button"
-                onClick={() => { setEmail('manager@dayflow.com'); setPassword('manager123'); setIsDemoOpen(false); }}
+                onClick={() => { setEmail('alice@dayflow.com'); setPassword('employee123'); setIsDemoOpen(false); }}
                 className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-900 border border-slate-800 hover:bg-purple-950/30 hover:border-purple-500/30 cursor-pointer transition-all group text-left"
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-200 group-hover:text-purple-400 transition-colors">Sarah Manager</span>
+                    <span className="text-sm font-semibold text-slate-200 group-hover:text-purple-400 transition-colors">Alice Johnson</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">Manager</span>
                   </div>
-                  <div className="text-xs text-slate-500 mt-1 font-mono">manager@dayflow.com</div>
+                  <div className="text-xs text-slate-500 mt-1 font-mono">alice@dayflow.com</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] bg-slate-900 px-2 py-1 rounded text-slate-500 font-mono border border-slate-800">manager123</span>
+                  <span className="text-[10px] bg-slate-900 px-2 py-1 rounded text-slate-500 font-mono border border-slate-800">employee123</span>
                 </div>
               </button>
 

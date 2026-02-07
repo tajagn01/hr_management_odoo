@@ -50,10 +50,7 @@ export const leaveSelect = {
     endDate: true,
     days: true,
     status: true,
-    reason: true,
-    createdAt: true,
-    adminComment: true,
-    approvedAt: true
+    reason: true
 };
 
 export const payrollSelect = {
@@ -68,17 +65,19 @@ export const payrollSelect = {
 // AGGREGATED "BFF" FETCHER (Staff Engineer Level)
 // -----------------------------------------------------------------------------
 
-export const getEmployeeOverviewCached = async (employeeId: string) => {
-        // Parallel Fetching: The "BFF" Pattern
+export const getEmployeeOverviewCached = unstable_cache(
+    async (employeeId: string) => {
+        // Parallel Fetching: The "BFF" Pattern inside the Cache Worker
         const start = performance.now();
 
-        // Calculate date ranges for last 90 days (3 months) to support calendar navigation
-        // Use IST (UTC+5:30) to match the dashboard display timezone
-        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes in milliseconds
-        const now = new Date();
-        const istNow = new Date(now.getTime() + IST_OFFSET_MS);
-        const today = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999));
-        const ninetyDaysAgo = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate() - 90, 0, 0, 0, 0));
+        // Calculate date ranges for "Recent Activity" (e.g., last 30 days)
+        const today = new Date();
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+
+        // Normalize dates for index hit
+        today.setHours(23, 59, 59, 999);
+        thirtyDaysAgo.setHours(0, 0, 0, 0);
 
         const [employee, attendance, leaves, payroll] = await Promise.all([
             // 1. Profile
@@ -86,18 +85,19 @@ export const getEmployeeOverviewCached = async (employeeId: string) => {
                 where: { id: employeeId },
                 select: employeeSelect
             }),
-            // 2. Last 90 Days Attendance (for calendar navigation)
+            // 2. Recent Attendance
             prisma.attendance.findMany({
                 where: {
                     employeeId,
-                    date: { gte: ninetyDaysAgo, lte: today }
+                    date: { gte: thirtyDaysAgo, lte: today }
                 },
                 orderBy: { date: "desc" },
+                take: 30, // Limit to recent
                 select: attendanceSelect
             }),
             // 3. Recent Leaves
             prisma.leaveRequest.findMany({
-                where: { employeeId },
+                where: { employeeId }, // Index: [employeeId, createdAt]
                 orderBy: { createdAt: "desc" },
                 take: 5,
                 select: leaveSelect
@@ -110,16 +110,15 @@ export const getEmployeeOverviewCached = async (employeeId: string) => {
         ]);
 
         const duration = performance.now() - start;
-        console.log(`📊 [lib/data.ts] Employee ${employeeId}: ${attendance.length} attendance records in ${duration.toFixed(0)}ms (${ninetyDaysAgo.toISOString().split('T')[0]} → ${today.toISOString().split('T')[0]})`);
+        if (duration > 200) {
+            console.warn(`⚠️ Slow Aggregated Fetch for ${employeeId}: ${duration.toFixed(2)}ms`);
+        }
 
-        // summary calculations (current month in IST)
-        const monthStart = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), 1, 0, 0, 0, 0));
-        const monthEnd = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth() + 1, 0, 23, 59, 59, 999));
-        const currentMonthAttendance = attendance.filter(a => a.date >= monthStart && a.date <= monthEnd);
+        // summary calculations
         const attendanceSummary = {
-            present: currentMonthAttendance.filter(a => a.status === "PRESENT").length,
-            absent: currentMonthAttendance.filter(a => a.status === "ABSENT").length,
-            halfDay: currentMonthAttendance.filter(a => a.status === "HALF_DAY").length,
+            present: attendance.filter(a => a.status === "PRESENT").length,
+            absent: attendance.filter(a => a.status === "ABSENT").length,
+            halfDay: attendance.filter(a => a.status === "HALF_DAY").length,
         };
 
         return {
@@ -131,7 +130,10 @@ export const getEmployeeOverviewCached = async (employeeId: string) => {
                 attendance: attendanceSummary
             }
         };
-};
+    },
+    ["employee-overview-aggregate-v2"], // Key
+    { tags: [TAGS.employees, TAGS.attendance, TAGS.leaves, TAGS.payroll], revalidate: 300 } // Increased from 60s to 5min for better caching
+);
 
 // -----------------------------------------------------------------------------
 // LEGACY CACHED FETCHERS (Simplified)
@@ -199,53 +201,23 @@ export const getAttendanceCached = unstable_cache(
 );
 
 export const getLeavesCached = unstable_cache(
-    async (params: { employeeId?: string; status?: string; recentDays?: number; take?: number }) => {
-        const { employeeId, status, recentDays, take } = params;
-        console.log("🗄️ [DATA LAYER] getLeavesCached called with params:", params);
-
+    async (params: { employeeId?: string; status?: string }) => {
+        const { employeeId, status } = params;
         const where: any = {};
 
         if (employeeId) where.employeeId = employeeId;
-        if (status && status !== "all") {
-            const s = typeof status === 'string' ? status.toUpperCase() : status;
-            if (["PENDING", "APPROVED", "REJECTED"].includes(s)) where.status = s;
-        }
+        if (status && status !== "all") where.status = status;
 
-        // Handle recentDays filtering based on status
-        if (recentDays && !isNaN(recentDays)) {
-            const now = new Date();
-            const threshold = new Date(now);
-            threshold.setDate(now.getDate() - recentDays);
-            // Normalize threshold to start of day to be inclusive
-            threshold.setHours(0, 0, 0, 0);
-
-            // For APPROVED status, filter by approvedAt (when it was approved)
-            // For PENDING/REJECTED or no specific status, filter by createdAt (when it was created)
-            if (status && status.toUpperCase() === "APPROVED") {
-                where.approvedAt = { gte: threshold };
-            } else {
-                // For pending, rejected, or all statuses, use createdAt
-                where.createdAt = { gte: threshold };
-            }
-            console.log("📅 [DATA LAYER] Date threshold:", threshold.toISOString());
-        }
-
-        console.log("🔎 [DATA LAYER] Prisma where clause:", JSON.stringify(where, null, 2));
-        const takeCount = typeof take === 'number' && take > 0 ? take : 200;
-
-        const results = await prisma.leaveRequest.findMany({
+        return prisma.leaveRequest.findMany({
             where,
             select: {
                 ...leaveSelect,
-                employee: { select: { fullName: true, employeeCode: true, department: true, designation: true, id: true } }
+                employee: { select: { fullName: true, employeeCode: true } }
             },
             orderBy: { createdAt: "desc" },
-            take: takeCount,
+            take: 50,
         });
-
-        console.log("💾 [DATA LAYER] Query returned", results.length, "results");
-        return results;
     },
     ["leaves-list"],
-    { tags: [TAGS.leaves], revalidate: 10 } // Reduced from 180s to 10s for faster admin dashboard updates
+    { tags: [TAGS.leaves], revalidate: 180 } // Increased from 60s to 3min
 );

@@ -27,26 +27,14 @@ export async function getCompanyConfig(): Promise<CompanyConfig> {
         return cachedConfig;
     }
 
-    // @ts-ignore
-    const config = await prisma.companyConfig.findFirst();
-    if (!config) {
-        // Return defaults if not configured
-        cachedConfig = {
-            officeStartTime: '09:00',
-            gracePeriodMinutes: 15,
-            workingDays: [1, 2, 3, 4, 5, 6], // Mon-Sat
-            minimumHoursForFullDay: 8.0,
-            minimumHoursForHalfDay: 4.0
-        };
-    } else {
-        cachedConfig = {
-            officeStartTime: config.officeStartTime,
-            gracePeriodMinutes: config.gracePeriodMinutes,
-            workingDays: config.workingDays,
-            minimumHoursForFullDay: config.minimumHoursForFullDay,
-            minimumHoursForHalfDay: config.minimumHoursForHalfDay
-        };
-    }
+    // Return default configuration
+    cachedConfig = {
+        officeStartTime: '09:00',
+        gracePeriodMinutes: 15,
+        workingDays: [1, 2, 3, 4, 5, 6], // Mon-Sat (0=Sunday, 6=Saturday)
+        minimumHoursForFullDay: 8.0,
+        minimumHoursForHalfDay: 4.0
+    };
 
     lastConfigFetch = now;
     return cachedConfig;
@@ -64,20 +52,6 @@ export async function calculateAttendanceStatus(
     // 1. Check if HOLIDAY (Sunday or company holiday)
     const dayOfWeek = date.getDay(); // 0 = Sunday
     if (!config.workingDays.includes(dayOfWeek)) {
-        return AttendanceState.HOLIDAY;
-    }
-
-    // @ts-ignore
-    const holiday = await prisma.holiday.findFirst({
-        where: {
-            date: {
-                gte: dayStart,
-                lt: dayEnd
-            }
-        }
-    });
-
-    if (holiday) {
         return AttendanceState.HOLIDAY;
     }
 
@@ -170,14 +144,6 @@ export async function getBulkAttendanceStatus(
     // 1. Check Holiday (O(1) query)
     const dayOfWeek = date.getDay();
     let isHoliday = !config.workingDays.includes(dayOfWeek);
-
-    if (!isHoliday) {
-        // @ts-ignore
-        const holiday = await prisma.holiday.findFirst({
-            where: { date: { gte: dayStart, lt: dayEnd } }
-        });
-        if (holiday) isHoliday = true;
-    }
 
     // 2. Fetch ALL Attendance Records (O(1) query)
     const attendanceRecords = await prisma.attendance.findMany({

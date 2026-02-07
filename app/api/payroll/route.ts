@@ -70,9 +70,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Payroll record not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ payroll }, {
-      headers: { "Cache-Control": "private, max-age=300, stale-while-revalidate=3600" },
-    });
+    return NextResponse.json({ payroll });
   } catch (error) {
     console.error("Error fetching payroll:", error);
     return NextResponse.json({ error: "Failed to fetch payroll records" }, { status: 500 });

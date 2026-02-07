@@ -29,7 +29,7 @@ export async function createNotification(params: CreateNotificationParams) {
       type,
       title,
       message,
-      metadata: metadata ?? undefined,
+      metadata: metadata || null,
     },
   });
 

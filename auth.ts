@@ -80,42 +80,63 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
+    async signIn({ user, account, profile, email, credentials }) {
       // Handle Google OAuth sign-in
       if (account?.provider === "google") {
         try {
-          const email = user.email!;
+          const userEmail = user.email!;
 
           // Check if user exists
           const existingUser = await prisma.user.findUnique({
-            where: { email },
+            where: { email: userEmail },
             include: { employee: true },
           });
 
-          if (!existingUser) {
-            // Block login if account doesn't exist
-            logger.warn("Google login attempt without existing account", { email });
-            throw new Error("Please sign up first before using Google login. No account found for this email address.");
+          // User already exists - allow login
+          if (existingUser) {
+            // Check if account is active
+            if (!existingUser.isActive) {
+              logger.warn("Google login attempt with inactive account", { email: userEmail });
+              return "/login?error=AccountInactive";
+            }
+
+            logger.info("Existing user logged in via Google OAuth", { email: userEmail });
+
+            // Attach user data to the user object for JWT callback
+            (user as any).id = existingUser.id;
+            (user as any).role = existingUser.role;
+            (user as any).employeeId = existingUser.employee?.id;
+            (user as any).profileCompleted = existingUser.employee?.profileCompleted ?? false;
+
+            return true;
           }
 
-          // Check if account is active
-          if (!existingUser.isActive) {
-            logger.warn("Google login attempt with inactive account", { email });
-            throw new Error("Your account is inactive. Please contact the administrator.");
-          }
+          // User doesn't exist - create new account
+          logger.info("Creating new user account via Google OAuth", { email: userEmail });
+          
+          const newUser = await prisma.user.create({
+            data: {
+              email: userEmail,
+              password: "", // No password for Google OAuth users
+              role: "EMPLOYEE", // Default role
+              isActive: true,
+              emailVerified: true, // Google emails are pre-verified
+            },
+            include: { employee: true },
+          });
 
-          logger.info("Existing user logged in via Google OAuth", { email });
+          logger.info("New user created via Google OAuth", { email: userEmail, id: newUser.id });
 
           // Attach user data to the user object for JWT callback
-          (user as any).id = existingUser.id;
-          (user as any).role = existingUser.role;
-          (user as any).employeeId = existingUser.employee?.id;
-          (user as any).profileCompleted = existingUser.employee?.profileCompleted ?? false;
+          (user as any).id = newUser.id;
+          (user as any).role = newUser.role;
+          (user as any).employeeId = newUser.employee?.id;
+          (user as any).profileCompleted = newUser.employee?.profileCompleted ?? false;
 
           return true;
         } catch (error) {
           logger.error("Error in Google OAuth sign-in", error, { email: user.email });
-          return false;
+          return "/login?error=AuthError";
         }
       }
 
@@ -133,6 +154,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (trigger === "update" && session) {
         if (session.profileCompleted !== undefined) {
           token.profileCompleted = session.profileCompleted;
+        }
+        if (session.employeeId !== undefined) {
+          token.employeeId = session.employeeId;
         }
       }
 

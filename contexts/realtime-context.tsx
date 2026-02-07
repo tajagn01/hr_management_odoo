@@ -52,16 +52,6 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Check if Socket.IO is disabled (e.g., on Vercel serverless)
-    const isSocketDisabled = process.env.NEXT_PUBLIC_DISABLE_SOCKET_IO === "true" ||
-      typeof window !== "undefined" && window.location.hostname.includes("vercel.app");
-
-    if (isSocketDisabled) {
-      console.log("ℹ️ Socket.IO disabled in serverless environment - using API polling instead");
-      setConnectionFailed(true);
-      return;
-    }
-
     // Connect to Socket.IO (use window.location.origin if no URL configured)
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== "undefined" ? window.location.origin : "");
     if (!socketUrl) {
@@ -124,13 +114,11 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         presentToday: prev.presentToday + 1,
       }));
-      window.dispatchEvent(new CustomEvent("attendance:checkin", { detail: data }));
     });
 
     newSocket.on("attendance:checkout", (data: any) => {
       console.log("📥 Received attendance:checkout", data);
       // Handle check-out if needed
-      window.dispatchEvent(new CustomEvent("attendance:checkout", { detail: data }));
     });
 
     newSocket.on("stats:dashboard", (data: any) => {
@@ -171,17 +159,6 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       window.dispatchEvent(new CustomEvent("notification:admin", {
         detail: { ...data, role: "ADMIN" }
       }));
-    });
-
-    // Forward leave events to window so UI can react (e.g., refresh lists)
-    newSocket.on("leave:created", (data: any) => {
-      console.log("📥 Received leave:created", data);
-      window.dispatchEvent(new CustomEvent("leave:created", { detail: data }));
-    });
-
-    newSocket.on("leave:approved", (data: any) => {
-      console.log("📥 Received leave:approved", data);
-      window.dispatchEvent(new CustomEvent("leave:approved", { detail: data }));
     });
 
     newSocket.on("notification:employee", (data: any) => {

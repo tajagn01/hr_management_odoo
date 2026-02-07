@@ -3,10 +3,12 @@
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 //////////////////////////////////////////////////
@@ -21,11 +23,9 @@ enum Role {
 
 enum AttendanceStatus {
   PRESENT
-  LATE      // Late arrival (after grace period)
   ABSENT
   HALF_DAY
-  LEAVE     // Employee on approved leave
-  HOLIDAY   // Company holiday or Sunday
+  LEAVE
 }
 
 enum LeaveStatus {
@@ -38,13 +38,6 @@ enum LeaveType {
   PAID
   SICK
   UNPAID
-}
-
-enum NotificationType {
-  INFO
-  SUCCESS
-  WARNING
-  ERROR
 }
 
 //////////////////////////////////////////////////
@@ -119,35 +112,17 @@ model Attendance {
   checkIn     DateTime?
   checkOut    DateTime?
   workingHours Float?            // Working hours calculated on checkout
-  autoMarked  Boolean           @default(false) // Flag to indicate auto-marked attendance
 
   employee    Employee           @relation(fields: [employeeId], references: [id])
 
   createdAt   DateTime           @default(now())
 
-  // Prevent duplicate attendance records for same employee on same day
   @@unique([employeeId, date])
   @@index([employeeId])
   @@index([employeeId, date]) // existing
   @@index([date, employeeId]) // Optimized for reverse chronological queries
   @@index([date])
   @@index([status])
-}
-
-//////////////////////////////////////////////////
-// ATTENDANCE CONFIGURATION
-//////////////////////////////////////////////////
-
-model AttendanceConfig {
-  id              String   @id @default(uuid())
-  date            DateTime @unique // The date for which this config applies
-  autoMarkedToday Boolean  @default(false) // Whether auto-marking was done today
-  lockManualEntry Boolean  @default(false) // Whether to prevent manual attendance entry
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([date])
 }
 
 //////////////////////////////////////////////////
@@ -180,7 +155,6 @@ model LeaveRequest {
   @@index([status, startDate])     // Optimized for admin dashboard
   @@index([status])
   @@index([createdAt])
-  @@index([status, startDate, endDate]) // Optimized for bulk fetching
 }
 
 //////////////////////////////////////////////////
@@ -276,7 +250,7 @@ model Payroll {
 model Notification {
   id        String   @id @default(uuid())
   userId    String
-  type      NotificationType   // INFO, SUCCESS, WARNING, ERROR
+  type      String   // INFO, SUCCESS, WARNING, ERROR
   title     String
   message   String
   read      Boolean  @default(false)
@@ -302,36 +276,4 @@ model Session {
   expires      DateTime
 
   user         User     @relation(fields: [userId], references: [id])
-}
-
-//////////////////////////////////////////////////
-// HOLIDAY MANAGEMENT
-//////////////////////////////////////////////////
-
-model Holiday {
-  id          String   @id @default(uuid())
-  date        DateTime @unique
-  name        String   // e.g., "Republic Day", "Diwali"
-  description String?
-  isRecurring Boolean  @default(false) // For annual holidays
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  @@index([date])
-}
-
-//////////////////////////////////////////////////
-// COMPANY CONFIGURATION
-//////////////////////////////////////////////////
-
-model CompanyConfig {
-  id                      String   @id @default(uuid())
-  officeStartTime         String   @default("09:00")
-  officeEndTime           String   @default("18:00")
-  gracePeriodMinutes      Int      @default(15)
-  workingDays             Int[]    @default([1,2,3,4,5,6]) // Mon-Sat (0=Sunday, 6=Saturday)
-  minimumHoursForFullDay  Float    @default(8.0)
-  minimumHoursForHalfDay  Float    @default(4.0)
-  updatedAt               DateTime @updatedAt
-  createdAt               DateTime @default(now())
 }

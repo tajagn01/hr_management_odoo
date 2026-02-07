@@ -1,8 +1,6 @@
 // @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { revalidateTag } from "next/cache";
-import { TAGS } from "@/lib/data";
 import { auth } from "@/auth";
 import {
   emitAttendanceCheckIn,
@@ -11,7 +9,6 @@ import {
 } from "@/lib/realtime-emitter";
 import { updateMonthlyAttendance } from "@/lib/attendance-aggregator";
 import { logger } from "@/lib/logger";
-import { calculateAttendanceStatus } from "@/lib/attendance-service";
 
 // GET attendance records
 export async function GET(request: NextRequest) {
@@ -107,8 +104,8 @@ export async function GET(request: NextRequest) {
         }),
         prisma.attendance.findMany({
           where,
-          orderBy: { date: "asc" }, // Changed to ascending for chronological order
-          // Removed take limit for date-range queries to get all records
+          orderBy: { date: "desc" },
+          take: 100
         })
       ]);
 
@@ -132,9 +129,9 @@ export async function GET(request: NextRequest) {
           },
         },
         orderBy: {
-          date: "asc", // Changed to ascending for chronological order
+          date: "desc",
         },
-        // Removed take limit for date-range queries to get all records
+        take: 100, // Limit results
       });
     }
 
@@ -180,74 +177,7 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
-    // Use IST (UTC+5:30) to match dashboard display timezone
-    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-    const istNow = new Date(now.getTime() + IST_OFFSET_MS);
-    const today = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0));
-    const todayEnd = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999));
-
-    // Block attendance on Sundays (IST day)
-    if (istNow.getUTCDay() === 0) {
-      return NextResponse.json(
-        { error: "Attendance cannot be marked on Sundays." },
-        { status: 400 }
-      );
-    }
-
-    // Block check-in before 9:00 AM IST or after 5:00 PM IST
-    if (type === "checkIn") {
-      const istHour = istNow.getUTCHours();
-      const istMinute = istNow.getUTCMinutes();
-      const istTimeInMinutes = istHour * 60 + istMinute;
-      const nineAM = 9 * 60;    // 540 minutes
-      const fivePM = 17 * 60;   // 1020 minutes
-
-      if (istTimeInMinutes < nineAM) {
-        return NextResponse.json(
-          { error: "Check-in is not allowed before 9:00 AM IST." },
-          { status: 400 }
-        );
-      }
-      if (istTimeInMinutes >= fivePM) {
-        return NextResponse.json(
-          { error: "Check-in is not allowed after 5:00 PM IST." },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Check if employee has an approved leave for today
-    const approvedLeave = await prisma.leaveRequest.findFirst({
-      where: {
-        employeeId,
-        status: 'APPROVED',
-        startDate: { lte: todayEnd },
-        endDate: { gte: today }
-      }
-    });
-
-    if (approvedLeave) {
-      return NextResponse.json({
-        error: "You cannot mark attendance. You are on approved leave today.",
-        leaveType: approvedLeave.type,
-        leaveDates: {
-          start: approvedLeave.startDate,
-          end: approvedLeave.endDate
-        }
-      }, { status: 400 });
-    }
-
-    // Check if manual attendance is locked due to auto-marking
-    const attendanceConfig = await prisma.attendanceConfig.findUnique({
-      where: { date: today }
-    });
-
-    if (attendanceConfig?.lockManualEntry) {
-      return NextResponse.json({
-        error: "Manual attendance is locked. Attendance has been automatically marked for today.",
-        autoMarked: true
-      }, { status: 400 });
-    }
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     // Check if attendance record exists for today
     let attendance = await prisma.attendance.findUnique({
@@ -272,20 +202,12 @@ export async function POST(request: NextRequest) {
       });
 
       // Create new attendance record with check-in
-      attendance = await prisma.attendance.upsert({
-        where: {
-          // @ts-ignore
-          employeeId_date: {
-            employeeId,
-            date: today,
-          },
-        },
-        update: {}, // Don't update if already exists (shouldn't happen due to check above)
-        create: {
+      attendance = await prisma.attendance.create({
+        data: {
           employeeId,
           date: today,
           // @ts-ignore
-          status: await calculateAttendanceStatus(employeeId, today),
+          status: "PRESENT",
           checkIn: now,
         },
         include: {
@@ -369,9 +291,6 @@ export async function POST(request: NextRequest) {
           checkOut: now,
           // @ts-ignore
           workingHours: Math.round(workingHours * 100) / 100, // Round to 2 decimal places
-          // Recalculate status on check-out (e.g. check for HALF_DAY)
-          // @ts-ignore
-          status: await calculateAttendanceStatus(employeeId, today),
         },
         include: {
           employee: {
@@ -403,7 +322,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid type. Must be 'checkIn' or 'checkOut'" }, { status: 400 });
     }
 
-    revalidateTag(TAGS.attendance, "default"); // Invalidate cache
+    revalidateTag(TAGS.attendance); // Invalidate cache
 
     return NextResponse.json({
       message: `${type === "checkIn" ? "Checked in" : "Checked out"} successfully`,

@@ -12,11 +12,19 @@ interface AttendancePieChartProps {
 }
 
 export function AttendancePieChart({ data }: AttendancePieChartProps) {
+  // Add default values to prevent undefined errors
+  const safeData = {
+    present: data?.present || 0,
+    absent: data?.absent || 0,
+    late: data?.late || 0,
+    leave: data?.leave || 0
+  };
+
   const chartData = [
-    { name: "Present", value: data.present, color: "#22c55e" }, // green-500
-    { name: "Late", value: data.late, color: "#f59e0b" },      // amber-500
-    { name: "Absent", value: data.absent, color: "#ef4444" },   // red-500
-    { name: "On Leave", value: data.leave, color: "#3b82f6" },  // blue-500
+    { name: "Present", value: safeData.present, color: "#22c55e" }, // green-500
+    { name: "Late", value: safeData.late, color: "#f59e0b" },      // amber-500
+    { name: "Absent", value: safeData.absent, color: "#ef4444" },   // red-500
+    { name: "On Leave", value: safeData.leave, color: "#3b82f6" },  // blue-500
   ].filter(item => item.value > 0)
 
   if (chartData.length === 0) {

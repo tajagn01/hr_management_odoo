@@ -17,7 +17,8 @@ A modern HR management system built with Next.js 16, featuring employee manageme
 
 ## Features
 
-- 🔐 Role-based authentication (Admin & Employee)
+- 🔐 Role-based authentication (Admin, Manager & Employee)
+- 🔑 Google OAuth login with automatic account creation
 - 👥 Employee management
 - 📅 Attendance tracking
 - 🏖️ Leave request management
@@ -25,6 +26,7 @@ A modern HR management system built with Next.js 16, featuring employee manageme
 - 📊 Dashboard with analytics charts
 - 🌙 Dark/Light theme support
 - ⌨️ Command menu (Ctrl/Cmd + K)
+- 💾 Database backup & restore system
 
 ---
 
@@ -195,10 +197,88 @@ After seeding the database, you can log in with these accounts:
 | `npm run build` | Build for production |
 | `npm run start` | Start production server |
 | `npm run lint` | Run ESLint |
+| `npm run backup` | Create database backup |
+| `npm run restore` | Restore from latest backup |
+| `npm run backup:list` | List all available backups |
+| `npm run migrate:safe` | Safe migration with auto-backup |
+| `npm run users:show` | Show all users in database |
+| `npm run seed:attendance` | Seed attendance data (Jan-Feb 2026) |
+| `npm run activate:employees` | Activate all employee profiles |
 | `npx prisma studio` | Open Prisma Studio (database GUI) |
 | `npx prisma migrate dev` | Create new migration |
 | `npx prisma migrate deploy` | Apply migrations |
 | `npx prisma generate` | Generate Prisma client |
+
+## 💾 Database Backup & Restore
+
+Protect your data with the built-in backup system:
+
+```bash
+# Create a backup
+npm run backup
+
+# List all backups
+npm run backup:list
+
+# Restore from latest backup
+npm run restore
+
+# Restore from specific backup
+npm run restore backups/backup-2026-02-07T18-42-30-638Z.json
+```
+
+### Backup Best Practices
+
+✅ Backup before database migrations: `npm run migrate:safe`  
+✅ Backup before bulk data changes  
+✅ Keep 30 days of backups locally  
+✅ Sync backups to cloud storage (OneDrive, Google Drive, etc.)
+
+### View Database
+
+Open Prisma Studio to view and edit data:
+```bash
+npx prisma studio
+```
+Opens at http://localhost:5555
+
+## 🚀 Vercel Deployment
+
+### Cron Jobs (Auto-Attendance)
+
+The system includes automatic cron jobs configured in `vercel.json`:
+
+1. **Auto-Mark Attendance** - 10:30 PM IST (Mon-Sat)
+2. **Auto-Checkout** - 5:15 PM IST (Mon-Sat)  
+3. **Birthday Notifications** - 12:00 AM IST (Daily)
+
+### Required Environment Variables
+
+Add these to your Vercel project:
+
+```bash
+DATABASE_URL=your-database-url
+AUTH_SECRET=your-auth-secret
+CRON_SECRET=your-cron-secret  # Generate with: openssl rand -hex 32
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
+### Deploy Steps
+
+1. Push to GitHub
+2. Import to Vercel
+3. Add environment variables
+4. Deploy
+
+## 🔐 Google OAuth
+
+Google login is enabled for both new and existing users:
+
+- **Login page**: Works for existing users
+- **Register page**: Creates new accounts automatically
+- **Auto-verification**: Google emails are pre-verified
+- **Profile completion**: New users must complete profile after first login
 
 ---
 

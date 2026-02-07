@@ -28,15 +28,11 @@ import {
   MessageSquare,
   ArrowRight,
   Sparkles,
-  Plus,
-  ShieldCheck,
-  ClipboardList,
-  CalendarOff
+  Plus
 } from "lucide-react";
 
 // Memoize sub-components to prevent re-renders on parent state changes
-// Temporarily disabled AttendanceChart memo to force tooltip update
-// const MemoizedAttendanceChart = memo(AttendanceChart);
+const MemoizedAttendanceChart = memo(AttendanceChart);
 const MemoizedDepartmentChart = memo(DepartmentChart);
 const MemoizedAttendancePieChart = memo(AttendancePieChart);
 const MemoizedPayrollChart = memo(PayrollChart);
@@ -55,41 +51,26 @@ export default function AdminPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Use Indian Standard Time (IST = UTC+5:30) day boundaries for consistent data across pages
-  // This matches the auto-mark scheduler which also runs at 5 PM IST
   const today = useMemo(() => {
-    const now = new Date();
-    // Convert to IST: UTC+5:30
-    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000) - (now.getTimezoneOffset() * 60 * 1000));
-    return new Date(Date.UTC(
-      istTime.getUTCFullYear(),
-      istTime.getUTCMonth(),
-      istTime.getUTCDate()
-    ));
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
   }, []);
 
   const tomorrow = useMemo(() => {
-    return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1));
+    const d = new Date(today);
+    d.setDate(d.getDate() + 1);
+    return d;
   }, [today]);
 
-  // 1. Fetch Employees (excluding managers/admins for dashboard stats)
+  // 1. Fetch Employees
   const { data: employeesData } = useQuery({
-    queryKey: ['employees', 'with-payroll', 'exclude-managers'],
+    queryKey: ['employees', 'with-payroll'],
     queryFn: async () => {
-      const res = await fetch("/api/employees?includePayroll=true&excludeManagers=true");
+      const res = await fetch("/api/employees?includePayroll=true");
       return res.json();
     },
-    placeholderData: keepPreviousData,
-    staleTime: Infinity,
-  });
-
-  // 1b. Fetch all users to get manager count
-  const { data: allUsersData } = useQuery({
-    queryKey: ['employees', 'all-users'],
-    queryFn: async () => {
-      const res = await fetch("/api/employees?includePayroll=false");
-      return res.json();
-    },
+    // Use keepPreviousData to show stale data while refetching if needed (rare due to Infinity staleTime)
     placeholderData: keepPreviousData,
     staleTime: Infinity,
   });
@@ -116,106 +97,8 @@ export default function AdminPage() {
     staleTime: Infinity,
   });
 
-  // 3b. Fetch Recent Leave Requests (Last 5, newest first)
-  const { data: recentLeaveData } = useQuery({
-    queryKey: ['leave-requests', 'recent'],
-    queryFn: async () => {
-      console.log("🔄 [ADMIN] Fetching recent leave requests...");
-      const res = await fetch("/api/leave?limit=5");
-      const data = await res.json();
-      console.log("✅ [ADMIN] Recent leave data received:", data);
-      return data;
-    },
-    placeholderData: keepPreviousData,
-    staleTime: 0, // Always fetch fresh data
-  });
-
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Listen for leave events from realtime and refresh leave queries
-  useEffect(() => {
-    const onLeaveCreated = (e: any) => {
-      console.log("🔔 admin: leave:created event received", e?.detail);
-      const detail = e?.detail;
-
-      // Optimistically insert the new leave into the cached leave list so UI updates immediately
-      try {
-        queryClient.setQueryData(['leave-requests', 'all'], (old: any) => {
-          const existing = old?.leaveRequests || [];
-          const newLeave = {
-            id: detail.leaveRequestId || detail.id || `tmp-${Date.now()}`,
-            type: detail.type || detail.leaveType || "OTHER",
-            startDate: detail.startDate || detail.start || new Date().toISOString(),
-            endDate: detail.endDate || detail.end || new Date().toISOString(),
-            days: detail.days || 1,
-            status: detail.status || "PENDING",
-            reason: detail.reason || null,
-            createdAt: detail.timestamp || new Date().toISOString(),
-            employee: { fullName: detail.employeeName || "Unknown" },
-          };
-
-          return { ...old, leaveRequests: [newLeave, ...existing] };
-        });
-      } catch (err) {
-        console.error("Failed to optimistic-insert leave into cache:", err);
-      }
-
-      // Also trigger an invalidation/refetch to ensure canonical data arrives
-      queryClient.invalidateQueries({ queryKey: ['leave-requests', 'all'] });
-      queryClient.refetchQueries({ queryKey: ['leave-requests', 'all'] });
-    };
-
-    const onLeaveStatusChange = (e: any) => {
-      console.log("🔔 admin: leave status event received", e?.detail);
-      const detail = e?.detail;
-      if (!detail?.leaveRequestId) return;
-
-      try {
-        queryClient.setQueryData(['leave-requests', 'all'], (old: any) => {
-          const existing = old?.leaveRequests || [];
-          const updated = existing.map((lr: any) => {
-            if (lr.id === detail.leaveRequestId || lr.id === detail.id) {
-              return { ...lr, status: detail.status || lr.status };
-            }
-            return lr;
-          });
-          return { ...old, leaveRequests: updated };
-        });
-      } catch (err) {
-        console.error("Failed to update leave status in cache:", err);
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['leave-requests', 'all'] });
-      queryClient.refetchQueries({ queryKey: ['leave-requests', 'all'] });
-    };
-
-    window.addEventListener('leave:created', onLeaveCreated as EventListener);
-    window.addEventListener('leave:approved', onLeaveStatusChange as EventListener);
-    window.addEventListener('leave:rejected', onLeaveStatusChange as EventListener);
-
-    return () => {
-      window.removeEventListener('leave:created', onLeaveCreated as EventListener);
-      window.removeEventListener('leave:approved', onLeaveStatusChange as EventListener);
-      window.removeEventListener('leave:rejected', onLeaveStatusChange as EventListener);
-    };
-  }, [queryClient]);
-
-  // Keep today's attendance breakdown in sync with real-time events
-  useEffect(() => {
-    const onAttendanceChange = () => {
-      queryClient.invalidateQueries({ queryKey: ['attendance-status', 'dashboard', today.toISOString()] });
-      queryClient.refetchQueries({ queryKey: ['attendance-status', 'dashboard', today.toISOString()] });
-    };
-
-    window.addEventListener('attendance:checkin', onAttendanceChange as EventListener);
-    window.addEventListener('attendance:checkout', onAttendanceChange as EventListener);
-
-    return () => {
-      window.removeEventListener('attendance:checkin', onAttendanceChange as EventListener);
-      window.removeEventListener('attendance:checkout', onAttendanceChange as EventListener);
-    };
-  }, [queryClient, today]);
 
   // Combine isFetching from all queries
   const isGlobalFetching = useQueryClient().isFetching() > 0;
@@ -226,116 +109,112 @@ export default function AdminPage() {
     const minDelay = new Promise(resolve => setTimeout(resolve, 800));
 
     await Promise.all([
-      queryClient.refetchQueries({ queryKey: ['employees', 'with-payroll', 'exclude-managers'] }),
-      // Refetch all attendance queries (dashboard stats, yearly chart, etc.)
+      queryClient.refetchQueries({ queryKey: ['employees', 'with-payroll'] }),
       // Refetch all attendance queries (dashboard stats, yearly chart, etc.)
       queryClient.refetchQueries({ queryKey: ['attendance'] }),
-      queryClient.refetchQueries({ queryKey: ['attendance-status'] }), // Refresh cached status
       queryClient.refetchQueries({ queryKey: ['leave-requests', 'all'] }),
-      queryClient.refetchQueries({ queryKey: ['leave-requests', 'recent'] }), // Added: Refetch recent leaves
       queryClient.invalidateQueries({ queryKey: ['attendance-stats'] }),
       minDelay
     ]);
     setIsRefreshing(false);
   };
 
-  // 4. Fetch Real-time Status from API (Bulk) to ensure consistency
-  // This replaces client-side calculation logic
-  const { data: statusData } = useQuery({
-    queryKey: ['attendance-status', 'dashboard', today.toISOString()],
-    queryFn: async () => {
-      const allEmployees = employeesData?.employees || [];
-      if (allEmployees.length === 0) return { results: [] };
-
-      const ids = allEmployees.map((e: any) => e.id);
-      // Construct URL carefully to handle many IDs
-      const params = new URLSearchParams();
-      params.append('startDate', today.toISOString());
-      params.append('endDate', today.toISOString());
-      ids.forEach((id: string) => params.append('employeeIds[]', id));
-
-      const res = await fetch(`/api/attendance/status/bulk?${params.toString()}`);
-      return res.json();
-    },
-    enabled: !!employeesData?.employees?.length,
-    placeholderData: keepPreviousData,
-    staleTime: 60000, // 1 minute stale time
-  });
-
+  // Memoize all derived calculations
   const stats = useMemo(() => {
     const allEmployees = employeesData?.employees || [];
-    const totalEmployees = allEmployees.length;
+    const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
+    const totalEmployees = regularEmployees.length;
 
-    const monthlyPayroll = allEmployees.reduce((sum: number, emp: any) => {
+    const monthlyPayroll = regularEmployees.reduce((sum: number, emp: any) => {
       return sum + (emp.payroll?.netSalary || 0);
     }, 0);
 
-    const calculatedStatuses = statusData?.results || [];
+    const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
 
-    // Group By Status
-    const presentCount = calculatedStatuses.filter((r: any) => r.status === 'PRESENT' || r.status === 'HALF_DAY').length;
-    const lateCount = calculatedStatuses.filter((r: any) => r.status === 'LATE').length;
-    const onLeaveCount = calculatedStatuses.filter((r: any) => r.status === 'LEAVE').length;
-    const absentCount = calculatedStatuses.filter((r: any) => r.status === 'ABSENT').length;
+    // 1. Calculate Present & Late
+    let presentCount = 0;
+    let lateCount = 0;
+    const LATE_THRESHOLD_HOUR = 9;
+    const LATE_THRESHOLD_MINUTE = 30;
 
-    // Note: lateCount is typically considered "Present" but late. 
-    // If you want "Present Today" to include Late people:
-    const totalPresent = presentCount + lateCount;
+    const presentRecords = attendanceData?.attendanceRecords?.filter((a: any) => {
+      if (!regularEmployeeIds.has(a.employeeId)) return false;
+      const status = a.status?.toUpperCase();
+      const isPresent = status === "PRESENT" || status === "HALF_DAY" || (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE" && status !== "LEAVE");
 
-    const allEmployeeIds = new Set(allEmployees.map((e: any) => e.id));
+      if (isPresent) {
+        presentCount++;
+        // Check for Late
+        if (a.checkIn) {
+          const checkInTime = new Date(a.checkIn);
+          const thresholdTime = new Date(checkInTime);
+          thresholdTime.setHours(LATE_THRESHOLD_HOUR, LATE_THRESHOLD_MINUTE, 0, 0);
+          if (checkInTime > thresholdTime) {
+            lateCount++;
+          }
+        }
+      }
+      return isPresent;
+    }) || [];
+
+    // 2. Calculate On Leave (Approved leaves for today)
+    // Note: API should ideally return only active leaves for today, but we filter client side to be safe if full list returned
+    const onLeaveCount = leaveData?.leaveRequests?.filter((lr: any) => {
+      if (!regularEmployeeIds.has(lr.employeeId)) return false;
+      if (lr.status !== "APPROVED") return false;
+
+      const start = new Date(lr.startDate);
+      const end = new Date(lr.endDate);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+
+      // Check overlap
+      return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
+    }).length || 0;
+
+
+    // 3. Calculate Absent
+    // Rule: Total - Present - On Leave
+    // Ensure non-negative
+    const calculatedAbsent = totalEmployees - presentCount - onLeaveCount;
+    const absentCount = calculatedAbsent > 0 ? calculatedAbsent : 0;
+
+
     const allLeaves = leaveData?.leaveRequests || [];
     const pendingLeaves = allLeaves.filter((lr: any) =>
-      lr.status === "PENDING" && allEmployeeIds.has(lr.employeeId)
+      lr.status === "PENDING" && regularEmployeeIds.has(lr.employeeId)
     ).length;
-    const approvedLeaves = allLeaves.filter((lr: any) => lr.status === "APPROVED").length;
-    const rejectedLeaves = allLeaves.filter((lr: any) => lr.status === "REJECTED").length;
 
-    // Manager count from all users
-    const allUsers = allUsersData?.employees || [];
-    const managerCount = allUsers.filter((emp: any) => emp.user?.role === "MANAGER").length;
-
-    // Combine with realtime stats for "Present Today" if websocket pushed updates
-    const displayPresent = attendanceStats.presentToday > 0 ? attendanceStats.presentToday : totalPresent;
+    // Combine with realtime stats if available (Realtime usually just sends "presentToday", we might stick to derived for consistency unless realtime is smarter)
+    // For this strict requirement, let's stick to the derived "presentCount" from the fresh attendance list to ensure "Late" logic consistency,
+    // unless attendanceStats is fully populated.
+    const displayPresent = attendanceStats.presentToday > 0 ? attendanceStats.presentToday : presentCount;
+    // If realtime updates present, we might need to recalculate absent. 
+    // For safety in this iteration, we rely on the derived logic from `attendanceData` which is refetched on refresh/interval.
 
     return {
       totalEmployees,
-      presentToday: totalPresent,
+      presentToday: presentCount, // Use strict derived count
       absentToday: absentCount,
       lateToday: lateCount,
       onLeaveToday: onLeaveCount,
       pendingLeaves,
-      approvedLeaves,
-      rejectedLeaves,
-      managerCount,
       monthlyPayroll,
     };
-  }, [employeesData, statusData, leaveData, attendanceStats, allUsersData]);
+  }, [employeesData, attendanceData, leaveData, attendanceStats]);
 
 
   const recentLeaveRequestsList = useMemo(() => {
-    console.log("🧮 [ADMIN] Calculating recentLeaveRequestsList...");
-    const allLeaves = recentLeaveData?.leaveRequests || leaveData?.leaveRequests || [];
-    console.log("📝 [ADMIN] All leaves before filtering:", allLeaves.length, allLeaves);
+    const allLeaves = leaveData?.leaveRequests || [];
+    const allEmployees = employeesData?.employees || [];
+    const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
+    const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
 
-    // Log employeeId values to debug
-    if (allLeaves.length > 0) {
-      console.log("🆔 [ADMIN] Leave request employeeIds:", allLeaves.map((lr: any) => lr.employeeId));
-    }
-
-    // REMOVED: Employee role filter - All users can submit leave requests regardless of role
-    // The previous filter was excluding leave requests from ADMIN/MANAGER users
-    // const allEmployees = employeesData?.employees || [];
-    // const regularEmployees = allEmployees.filter((emp: any) => emp.user?.role === "EMPLOYEE");
-    // const regularEmployeeIds = new Set(regularEmployees.map((e: any) => e.id));
-
-    // Simply sort and limit the results
-    const result = allLeaves
+    return allLeaves
+      .filter((lr: any) => regularEmployeeIds.has(lr.employeeId))
       .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 5);
-    console.log("✨ [ADMIN] Final recentLeaveRequestsList:", result.length, result);
-
-    return result;
-  }, [recentLeaveData, leaveData]); // Removed employeesData dependency since we're not filtering by it
+      .slice(0, 10);
+  }, [leaveData, employeesData]);
 
   const formatCurrency = (amount: number) => {
     if (amount >= 10000000) {
@@ -376,7 +255,7 @@ export default function AdminPage() {
       value: stats.absentToday.toString(),
       change: "Today",
       trend: "down",
-      icon: UserCheck,
+      icon: UserCheck, // Or a generic Alert icon
       lightColor: "bg-red-100 dark:bg-red-900",
       textColor: "text-red-600 dark:text-red-400",
     },
@@ -388,24 +267,6 @@ export default function AdminPage() {
       icon: Clock,
       lightColor: "bg-amber-100 dark:bg-amber-900",
       textColor: "text-amber-600 dark:text-amber-400",
-    },
-    {
-      title: "On Leave",
-      value: stats.onLeaveToday.toString(),
-      change: "Today",
-      trend: "neutral",
-      icon: CalendarOff,
-      lightColor: "bg-teal-100 dark:bg-teal-900",
-      textColor: "text-teal-600 dark:text-teal-400",
-    },
-    {
-      title: "Pending Leaves",
-      value: stats.pendingLeaves.toString(),
-      change: `${stats.approvedLeaves} approved`,
-      trend: "neutral",
-      icon: ClipboardList,
-      lightColor: "bg-orange-100 dark:bg-orange-900",
-      textColor: "text-orange-600 dark:text-orange-400",
     },
   ];
 
@@ -470,12 +331,13 @@ export default function AdminPage() {
                 <div className="flex items-center gap-1.5 mt-2 text-xs">
                   {stat.trend === "up" ? (
                     <TrendingUp className="h-3.5 w-3.5 text-green-500" />
-                  ) : stat.trend === "down" ? (
+                  ) : (
                     <TrendingDown className="h-3.5 w-3.5 text-red-500" />
-                  ) : null}
-                  <span className={stat.trend === "up" ? "text-green-600 font-medium" : stat.trend === "down" ? "text-red-600 font-medium" : "text-muted-foreground font-medium"}>
+                  )}
+                  <span className={stat.trend === "up" ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
                     {stat.change}
                   </span>
+                  <span className="text-muted-foreground opacity-70">vs last month</span>
                 </div>
               </div>
             ))}
@@ -487,11 +349,11 @@ export default function AdminPage() {
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2 rounded-xl border-dashed border-2 hover:border-solid hover:border-primary/50 hover:bg-primary/5" asChild>
-              <a href="/admin/employees">
+              <a href="/admin/employees/new">
                 <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="text-xs font-medium">Employees</span>
+                <span className="text-xs font-medium">Add Employee</span>
               </a>
             </Button>
             <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2 rounded-xl border-dashed border-2 hover:border-solid hover:border-primary/50 hover:bg-primary/5" asChild>
@@ -537,15 +399,15 @@ export default function AdminPage() {
                 <p className="text-sm text-muted-foreground">All caught up!</p>
               </div>
             ) : (
-              recentLeaveRequestsList.slice(0, 5).map((request: any) => (
+              recentLeaveRequestsList.slice(0, 3).map((request: any) => (
                 <div key={request.id} className="bg-card rounded-xl border shadow-sm overflow-hidden relative flex">
                   <div className={`w-1.5 ${request.status === 'APPROVED' ? 'bg-green-500' :
                     request.status === 'REJECTED' ? 'bg-red-500' : 'bg-amber-400'
                     }`} />
                   <div className="p-3 flex-1 flex items-center gap-3">
                     <div className="flex flex-col items-center justify-center h-12 w-12 rounded-lg bg-muted/50 border shrink-0">
-                      <span className="text-xs font-bold uppercase text-muted-foreground">{new Date(request.startDate).toLocaleDateString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' })}</span>
-                      <span className="text-lg font-bold leading-none">{new Date(request.startDate).toLocaleDateString('en-IN', { day: 'numeric', timeZone: 'Asia/Kolkata' })}</span>
+                      <span className="text-xs font-bold uppercase text-muted-foreground">{new Date(request.startDate).toLocaleDateString('en-US', { month: 'short' })}</span>
+                      <span className="text-lg font-bold leading-none">{new Date(request.startDate).getDate()}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
@@ -593,7 +455,7 @@ export default function AdminPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statsCards.map((stat, index) => (
           <Card key={index} className="overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -609,12 +471,13 @@ export default function AdminPage() {
               <div className="flex items-center text-xs mt-1">
                 {stat.trend === "up" ? (
                   <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-                ) : stat.trend === "down" ? (
+                ) : (
                   <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
-                ) : null}
-                <span className={stat.trend === "up" ? "text-green-500" : stat.trend === "down" ? "text-red-500" : "text-muted-foreground"}>
+                )}
+                <span className={stat.trend === "up" ? "text-green-500" : "text-red-500"}>
                   {stat.change}
                 </span>
+                <span className="text-muted-foreground ml-1">from last month</span>
               </div>
             </CardContent>
           </Card>
@@ -638,7 +501,7 @@ export default function AdminPage() {
                 <CardDescription>Monthly attendance and leave patterns</CardDescription>
               </CardHeader>
               <CardContent>
-                <AttendanceChart />
+                <MemoizedAttendanceChart />
               </CardContent>
             </Card>
             <Card className="col-span-3">
@@ -647,12 +510,14 @@ export default function AdminPage() {
                 <CardDescription>Real-time attendance breakdown</CardDescription>
               </CardHeader>
               <CardContent>
-                <MemoizedAttendancePieChart data={{
-                  present: stats.presentToday,
-                  absent: stats.absentToday,
-                  late: stats.lateToday,
-                  leave: stats.onLeaveToday
-                }} />
+                <MemoizedAttendancePieChart 
+                  data={{
+                    present: stats.presentToday,
+                    absent: stats.absentToday,
+                    late: stats.lateToday,
+                    leave: stats.onLeaveToday
+                  }}
+                />
               </CardContent>
             </Card>
           </div>
@@ -667,7 +532,7 @@ export default function AdminPage() {
                     <CardTitle>Recent Leave Requests</CardTitle>
                     <CardDescription>Latest employee leave applications</CardDescription>
                   </div>
-                  <Badge variant="secondary">{recentLeaveRequestsList.filter((r: any) => r.status === "PENDING").length} Pending</Badge>
+                  <Badge variant="secondary">{recentLeaveRequestsList.filter((r: any) => r.status === "pending").length} Pending</Badge>
                 </div>
               </CardHeader>
               <CardContent>

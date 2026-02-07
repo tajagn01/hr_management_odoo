@@ -226,9 +226,20 @@ export default function CompleteProfilePage() {
             });
 
             if (res.ok) {
-                await update({ profileCompleted: true });
-                router.refresh();
-                router.push("/employee");
+                const data = await res.json();
+                console.log("Profile completed successfully:", data);
+                
+                // Update session with new data
+                await update({ 
+                    profileCompleted: true,
+                    employeeId: data.employeeId 
+                });
+                
+                // Wait a bit for session to update
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Force a hard navigation to employee dashboard
+                window.location.href = "/employee";
             } else {
                 const data = await res.json();
                 alert(data.error || "Failed to complete profile");
