@@ -237,8 +237,15 @@ async function main() {
     for (const emp of allEmployees) {
       const status = attendanceStatuses[i];
 
-      await prisma.attendance.create({
-        data: {
+      await prisma.attendance.upsert({
+        where: {
+          employeeId_date: {
+            employeeId: emp.id,
+            date: date
+          }
+        },
+        update: {}, // Don't update if exists
+        create: {
           employeeId: emp.id,
           date: date,
           status: status as "PRESENT" | "ABSENT" | "HALF_DAY" | "LEAVE",

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
+import { useEmployeeByEmail, useUpdateProfile } from "@/lib/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,29 +15,8 @@ import { User, Mail, Phone, MapPin, Calendar, Shield, Edit2, Save, X } from "luc
 export default function AdminProfilePage() {
   const { data: session } = useSession();
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [employee, setEmployee] = useState<any>(null);
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        if (!session?.user?.email) return;
-        
-        const res = await fetch(`/api/employees?email=${session.user.email}`);
-        const data = await res.json();
-        
-        if (data.employee) {
-          setEmployee(data.employee);
-        }
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching profile:", error);
-        setLoading(false);
-      }
-    };
-
-    fetchProfile();
-  }, [session]);
+  const { data: empData, isLoading: loading } = useEmployeeByEmail(session?.user?.email);
+  const employee = empData?.employee ?? null;
 
   const getInitials = (name: string) => {
     return name

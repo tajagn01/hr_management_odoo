@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import {
   Users,
   UserPlus,
+  UserCheck,
   Calendar,
   Search,
   RefreshCw,
@@ -75,6 +76,7 @@ export default function AdminEmployeesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState<"employees" | "managers">("employees");
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -98,7 +100,7 @@ export default function AdminEmployeesPage() {
   const rawEmployees = data.employees || [];
 
   // Map to the Employee interface expected by the component
-  const employees: Employee[] = useMemo(() => {
+  const allPeople: Employee[] = useMemo(() => {
     return rawEmployees.map((emp: any) => ({
       id: emp.id,
       fullName: emp.fullName,
@@ -111,8 +113,12 @@ export default function AdminEmployeesPage() {
       joinDate: new Date(emp.joiningDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       salary: emp.payroll?.netSalary || 0,
       role: emp.user?.role || "EMPLOYEE",
-    })).filter((emp: any) => emp.role === "EMPLOYEE");
+    }));
   }, [rawEmployees]);
+
+  const employees = useMemo(() => allPeople.filter(e => e.role === "EMPLOYEE"), [allPeople]);
+  const managers = useMemo(() => allPeople.filter(e => e.role === "MANAGER"), [allPeople]);
+  const activeList = activeTab === "employees" ? employees : managers;
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -124,27 +130,27 @@ export default function AdminEmployeesPage() {
     setIsRefreshing(false);
   };
 
-  // Calculate stats using useMemo
+  // Calculate stats based on active tab
   const stats = useMemo(() => {
-    const totalEmployees = employees.length;
-    const activeEmployees = employees.filter(e => e.status === "active").length;
-    const departments = [...new Set(employees.map(e => e.department))];
-    const totalPayroll = employees.reduce((sum, e) => sum + e.salary, 0);
-    return { totalEmployees, activeEmployees, departments, totalPayroll };
-  }, [employees]);
+    const totalCount = activeList.length;
+    const activeCount = activeList.filter(e => e.status === "active").length;
+    const departments = [...new Set(activeList.map(e => e.department))];
+    const totalPayroll = activeList.reduce((sum, e) => sum + e.salary, 0);
+    return { totalCount, activeCount, departments, totalPayroll };
+  }, [activeList]);
 
 
   // Filter data using useMemo
-  const filteredEmployees = useMemo(() => {
-    return employees.filter(employee => {
-      const matchesSearch = employee.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (employee.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        employee.designation.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesDepartment = departmentFilter === "all" || employee.department === departmentFilter;
-      const matchesStatus = statusFilter === "all" || employee.status === statusFilter;
+  const filteredList = useMemo(() => {
+    return activeList.filter(person => {
+      const matchesSearch = person.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (person.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        person.designation.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesDepartment = departmentFilter === "all" || person.department === departmentFilter;
+      const matchesStatus = statusFilter === "all" || person.status === statusFilter;
       return matchesSearch && matchesDepartment && matchesStatus;
     });
-  }, [employees, searchQuery, departmentFilter, statusFilter]);
+  }, [activeList, searchQuery, departmentFilter, statusFilter]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -152,6 +158,31 @@ export default function AdminEmployeesPage() {
       currency: 'INR',
       maximumFractionDigits: 0
     }).format(amount);
+  };
+
+  const handleExportEmployees = () => {
+    const headers = ['Name', 'Employee Code', 'Email', 'Phone', 'Department', 'Designation', 'Status', 'Join Date', 'Net Salary'];
+    const csvRows = [headers.join(',')];
+    for (const emp of filteredList) {
+      csvRows.push([
+        `"${emp.fullName}"`,
+        emp.employeeCode,
+        emp.email || '',
+        emp.phone || '',
+        emp.department,
+        emp.designation,
+        emp.status,
+        emp.joinDate,
+        emp.salary
+      ].join(','));
+    }
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `employees_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -169,7 +200,7 @@ export default function AdminEmployeesPage() {
               <RefreshCw className={`h-4 w-4 mr-2 ${(isFetching || isRefreshing) ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleExportEmployees}>
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
@@ -196,7 +227,7 @@ export default function AdminEmployeesPage() {
                   <RefreshCw className={`h-4 w-4 mr-2 ${(isFetching || isRefreshing) ? 'animate-spin' : ''}`} />
                   Refresh
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportEmployees}>
                   <Download className="h-4 w-4 mr-2" />
                   Export Data
                 </DropdownMenuItem>
@@ -254,16 +285,50 @@ export default function AdminEmployeesPage() {
         </div>
       </div>
 
+      {/* Tab Switcher */}
+      <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+        <button
+          onClick={() => { setActiveTab("employees"); setSearchQuery(""); setDepartmentFilter("all"); setStatusFilter("all"); }}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            activeTab === "employees"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Employees
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{employees.length}</Badge>
+          </div>
+        </button>
+        <button
+          onClick={() => { setActiveTab("managers"); setSearchQuery(""); setDepartmentFilter("all"); setStatusFilter("all"); }}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            activeTab === "managers"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4" />
+            Managers
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{managers.length}</Badge>
+          </div>
+        </button>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Employees</CardTitle>
-            <Users className="h-4 w-4 text-blue-500" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {activeTab === "employees" ? "Total Employees" : "Total Managers"}
+            </CardTitle>
+            {activeTab === "employees" ? <Users className="h-4 w-4 text-blue-500" /> : <UserCheck className="h-4 w-4 text-purple-500" />}
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.totalEmployees}</div>
-            <p className="text-xs text-muted-foreground">{stats.activeEmployees} active</p>
+            <div className="text-3xl font-bold">{stats.totalCount}</div>
+            <p className="text-xs text-muted-foreground">{stats.activeCount} active</p>
           </CardContent>
         </Card>
         <Card>
@@ -282,8 +347,8 @@ export default function AdminEmployeesPage() {
             <Briefcase className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{stats.totalEmployees > 0 ? formatCurrency(Math.round(stats.totalPayroll / stats.totalEmployees)) : formatCurrency(0)}</div>
-            <p className="text-xs text-muted-foreground">Per employee</p>
+            <div className="text-3xl font-bold">{stats.totalCount > 0 ? formatCurrency(Math.round(stats.totalPayroll / stats.totalCount)) : formatCurrency(0)}</div>
+            <p className="text-xs text-muted-foreground">Per {activeTab === "employees" ? "employee" : "manager"}</p>
           </CardContent>
         </Card>
         <Card>
@@ -298,11 +363,15 @@ export default function AdminEmployeesPage() {
         </Card>
       </div>
 
-      {/* Employee List */}
+      {/* Employee / Manager List */}
       <Card>
         <CardHeader>
-          <CardTitle>All Employees</CardTitle>
-          <CardDescription>A list of all employees in your organization</CardDescription>
+          <CardTitle>{activeTab === "employees" ? "All Employees" : "All Managers"}</CardTitle>
+          <CardDescription>
+            {activeTab === "employees"
+              ? "A list of all employees in your organization"
+              : "A list of all managers in your organization"}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {/* Search and Filters */}
@@ -343,19 +412,19 @@ export default function AdminEmployeesPage() {
 
           {/* Mobile Card View - Premium Redesign */}
           <div className="md:hidden space-y-4">
-            {isLoading && employees.length === 0 ? (
+            {isLoading && activeList.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin mb-4 text-primary" />
-                <p>Loading employees...</p>
+                <p>Loading {activeTab}...</p>
               </div>
-            ) : filteredEmployees.length === 0 ? (
+            ) : filteredList.length === 0 ? (
               <div className="text-center py-12 px-4 border-2 border-dashed rounded-xl bg-muted/30">
                 <Users className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-                <p className="font-medium text-foreground">No employees found</p>
+                <p className="font-medium text-foreground">No {activeTab} found</p>
                 <p className="text-sm text-muted-foreground">Try adjusting your filters</p>
               </div>
             ) : (
-              filteredEmployees.map((employee) => (
+              filteredList.map((employee) => (
                 <div key={employee.id} className="bg-card rounded-xl border shadow-sm overflow-hidden relative">
                   {/* Status Indicator Strip */}
                   <div className={`absolute left-0 top-0 bottom-0 w-1 ${employee.status === "active" ? "bg-green-500" : "bg-gray-300"}`} />
@@ -367,7 +436,7 @@ export default function AdminEmployeesPage() {
                         <div className="relative">
                           <Avatar className="h-12 w-12 border-2 border-background shadow-sm">
                             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-lg">
-                              {employee.fullName.split(" ").map(n => n[0]).join("").toUpperCase()}
+                              {employee.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background ${employee.status === "active" ? "bg-green-500" : "bg-gray-400"}`} />
@@ -444,22 +513,22 @@ export default function AdminEmployeesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {isLoading && employees.length === 0 ? (
+                  {isLoading && activeList.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="text-center py-8">
                         <div className="flex items-center justify-center">
                           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
-                          Loading employees...
+                          Loading {activeTab}...
                         </div>
                       </td>
                     </tr>
-                  ) : filteredEmployees.map((employee) => (
+                  ) : filteredList.map((employee) => (
                     <tr key={employee.id} className="border-b hover:bg-muted/30 transition-colors">
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-10 w-10">
                             <AvatarFallback className="bg-primary/10 text-primary">
-                              {employee.fullName.split(" ").map(n => n[0]).join("").toUpperCase()}
+                              {employee.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <div>
@@ -517,19 +586,19 @@ export default function AdminEmployeesPage() {
                 </tbody>
               </table>
             </div>
-            {!isLoading && employees.length > 0 && filteredEmployees.length === 0 && (
+            {!isLoading && activeList.length > 0 && filteredList.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                No employees found matching your filters
+                No {activeTab} found matching your filters
               </div>
             )}
-            {!isLoading && employees.length === 0 && (
+            {!isLoading && activeList.length === 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                No employees found in the system.
+                No {activeTab} found in the system.
               </div>
             )}
           </div>
           <div className="mt-4 text-sm text-muted-foreground">
-            Showing {filteredEmployees.length} of {stats.totalEmployees} employees
+            Showing {filteredList.length} of {stats.totalCount} {activeTab}
           </div>
         </CardContent>
       </Card>

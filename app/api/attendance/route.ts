@@ -180,9 +180,41 @@ export async function POST(request: NextRequest) {
     }
 
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
+    // Use IST (UTC+5:30) to match dashboard display timezone
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+    const today = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0));
+    const todayEnd = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999));
+
+    // Block attendance on Sundays (IST day)
+    if (istNow.getUTCDay() === 0) {
+      return NextResponse.json(
+        { error: "Attendance cannot be marked on Sundays." },
+        { status: 400 }
+      );
+    }
+
+    // Block check-in before 9:00 AM IST or after 5:00 PM IST
+    if (type === "checkIn") {
+      const istHour = istNow.getUTCHours();
+      const istMinute = istNow.getUTCMinutes();
+      const istTimeInMinutes = istHour * 60 + istMinute;
+      const nineAM = 9 * 60;    // 540 minutes
+      const fivePM = 17 * 60;   // 1020 minutes
+
+      if (istTimeInMinutes < nineAM) {
+        return NextResponse.json(
+          { error: "Check-in is not allowed before 9:00 AM IST." },
+          { status: 400 }
+        );
+      }
+      if (istTimeInMinutes >= fivePM) {
+        return NextResponse.json(
+          { error: "Check-in is not allowed after 5:00 PM IST." },
+          { status: 400 }
+        );
+      }
+    }
 
     // Check if employee has an approved leave for today
     const approvedLeave = await prisma.leaveRequest.findFirst({
@@ -195,7 +227,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (approvedLeave) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: "You cannot mark attendance. You are on approved leave today.",
         leaveType: approvedLeave.type,
         leaveDates: {
@@ -211,7 +243,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (attendanceConfig?.lockManualEntry) {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: "Manual attendance is locked. Attendance has been automatically marked for today.",
         autoMarked: true
       }, { status: 400 });
@@ -240,8 +272,16 @@ export async function POST(request: NextRequest) {
       });
 
       // Create new attendance record with check-in
-      attendance = await prisma.attendance.create({
-        data: {
+      attendance = await prisma.attendance.upsert({
+        where: {
+          // @ts-ignore
+          employeeId_date: {
+            employeeId,
+            date: today,
+          },
+        },
+        update: {}, // Don't update if already exists (shouldn't happen due to check above)
+        create: {
           employeeId,
           date: today,
           // @ts-ignore

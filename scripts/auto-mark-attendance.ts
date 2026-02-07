@@ -28,9 +28,22 @@ async function autoMarkAttendance() {
     console.log(`📅 Auto-marking attendance for ${now.toDateString()}...`);
 
     try {
-        // Get start and end of today (using UTC for consistency across timezones)
-        const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
-        const endOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+        // Get start and end of today using Indian Standard Time (IST = UTC+5:30)
+        // This ensures consistency with the scheduler which runs at 5 PM IST
+        const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000) - (now.getTimezoneOffset() * 60 * 1000));
+        
+        const startOfToday = new Date(Date.UTC(
+            istTime.getUTCFullYear(),
+            istTime.getUTCMonth(),
+            istTime.getUTCDate(),
+            0, 0, 0, 0
+        ));
+        const endOfToday = new Date(Date.UTC(
+            istTime.getUTCFullYear(),
+            istTime.getUTCMonth(),
+            istTime.getUTCDate(),
+            23, 59, 59, 999
+        ));
 
         // First, check if ANYONE has made attendance today
         const anyAttendanceToday = await prisma.attendance.findFirst({
@@ -50,8 +63,13 @@ async function autoMarkAttendance() {
 
         console.log("✅ No attendance records found - proceeding with auto-marking");
 
-        // Get all active employees
+        // Get all active employees (exclude managers - they don't have attendance)
         const employees = await prisma.employee.findMany({
+            where: {
+                user: {
+                    role: "EMPLOYEE"
+                }
+            },
             include: {
                 user: true
             }
@@ -166,22 +184,18 @@ async function autoMarkAttendance() {
  * You'll need to implement this based on your leave management system
  */
 async function checkIfEmployeeOnLeave(employeeId: string, date: Date): Promise<boolean> {
-    // TODO: Implement leave checking logic
-    // For now, return false (no one is on leave)
-    // You might have a Leave model or check attendance status for LEAVE
+    const endOfDay = new Date(date);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
-    // Example implementation:
-    // const leaveRecord = await prisma.leave.findFirst({
-    //     where: {
-    //         employeeId: employeeId,
-    //         startDate: { lte: date },
-    //         endDate: { gte: date },
-    //         status: 'APPROVED'
-    //     }
-    // });
-    // return !!leaveRecord;
-
-    return false;
+    const leaveRecord = await prisma.leaveRequest.findFirst({
+        where: {
+            employeeId: employeeId,
+            status: 'APPROVED',
+            startDate: { lte: endOfDay },
+            endDate: { gte: date }
+        }
+    });
+    return !!leaveRecord;
 }
 
 /**

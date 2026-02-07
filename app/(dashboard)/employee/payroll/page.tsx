@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useMemo } from "react";
+import { useCurrentEmployee, usePayroll } from "@/lib/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,88 +20,39 @@ import {
 import { Button } from "@/components/ui/button";
 
 export default function EmployeePayrollPage() {
-  const { data: session } = useSession();
-  const [loading, setLoading] = useState(true);
-  const [payroll, setPayroll] = useState<any>(null);
-  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const { employeeId } = useCurrentEmployee();
+  const { data: payrollData, isLoading: loading } = usePayroll(employeeId);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
   };
 
-  // Fetch employee ID
-  const fetchEmployeeId = useCallback(async () => {
-    if (!session?.user?.email) return null;
+  const payroll = useMemo(() => {
+    const raw = payrollData?.payroll;
+    if (!raw) return null;
 
-    try {
-      const res = await fetch(`/api/employees?email=${session.user.email}`);
-      const data = await res.json();
-      if (data.employee) {
-        setEmployeeId(data.employee.id);
-        return data.employee.id;
-      }
-    } catch (error) {
-      console.error("Error fetching employee:", error);
-    }
-    return null;
-  }, [session?.user?.email]);
+    const gross = raw.basicSalary + raw.hra + raw.allowances;
 
-  // Fetch payroll data
-  const fetchPayroll = useCallback(async (empId: string) => {
-    if (!empId) {
-      console.warn("fetchPayroll called with invalid employeeId");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const res = await fetch(`/api/payroll?employeeId=${empId}`, { cache: "no-store" });
-      const data = await res.json();
-
-      if (data.payroll) {
-        // Calculate gross salary (basic + hra + allowances)
-        const gross = data.payroll.basicSalary + data.payroll.hra + data.payroll.allowances;
-
-        // Calculate breakdown (estimate allowances based on common structure)
-        const allowancesBreakdown = {
-          transport: Math.round(data.payroll.allowances * 0.3),
-          medical: Math.round(data.payroll.allowances * 0.25),
-          special: Math.round(data.payroll.allowances * 0.45),
-        };
-
-        // Estimate deductions breakdown
-        const deductionsBreakdown = {
-          pf: Math.round(data.payroll.deductions * 0.35), // ~35% for PF
-          tax: Math.round(data.payroll.deductions * 0.55), // ~55% for Tax
-          insurance: Math.round(data.payroll.deductions * 0.10), // ~10% for Insurance
-        };
-
-        setPayroll({
-          ...data.payroll,
-          gross,
-          allowancesBreakdown,
-          deductionsBreakdown,
-          totalDeductions: data.payroll.deductions,
-        });
-      }
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching payroll:", error);
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const loadData = async () => {
-      const empId = await fetchEmployeeId();
-      if (empId) {
-        await fetchPayroll(empId);
-      } else {
-        setLoading(false);
-      }
+    const allowancesBreakdown = {
+      transport: Math.round(raw.allowances * 0.3),
+      medical: Math.round(raw.allowances * 0.25),
+      special: Math.round(raw.allowances * 0.45),
     };
-    loadData();
-  }, [fetchEmployeeId, fetchPayroll]);
+
+    const deductionsBreakdown = {
+      pf: Math.round(raw.deductions * 0.35),
+      tax: Math.round(raw.deductions * 0.55),
+      insurance: Math.round(raw.deductions * 0.10),
+    };
+
+    return {
+      ...raw,
+      gross,
+      allowancesBreakdown,
+      deductionsBreakdown,
+      totalDeductions: raw.deductions,
+    };
+  }, [payrollData]);
 
   if (loading) {
     return (
@@ -128,7 +79,7 @@ export default function EmployeePayrollPage() {
   }
 
   const currentPayroll = {
-    month: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    month: new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }),
     payDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0],
     status: "processing",
   };
@@ -178,7 +129,7 @@ export default function EmployeePayrollPage() {
               <p className="text-3xl font-bold text-green-600">{formatCurrency(payroll.netSalary)}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 <Calendar className="h-3 w-3 inline mr-1" />
-                Expected on {new Date(currentPayroll.payDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                Expected on {new Date(currentPayroll.payDate).toLocaleDateString('en-IN', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Asia/Kolkata' })}
               </p>
             </div>
           </div>
@@ -339,7 +290,26 @@ export default function EmployeePayrollPage() {
                   <p className="text-xs text-muted-foreground">Net Pay</p>
                   <p className="font-bold text-green-600">{formatCurrency(payroll.netSalary)}</p>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => {
+                  const headers = ['Month', 'Basic Salary', 'HRA', 'Allowances', 'Gross', 'Deductions', 'Net Salary'];
+                  const row = [
+                    new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
+                    payroll.basicSalary,
+                    payroll.hra || 0,
+                    payroll.allowances || 0,
+                    payroll.gross,
+                    payroll.totalDeductions,
+                    payroll.netSalary
+                  ];
+                  const csv = [headers.join(','), row.join(',')].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `payslip_${new Date().toISOString().split('T')[0]}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}>
                   <Download className="h-4 w-4" />
                 </Button>
               </div>

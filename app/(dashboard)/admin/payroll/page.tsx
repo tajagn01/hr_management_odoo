@@ -576,7 +576,7 @@ export default function AdminPayrollPage() {
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10 border border-border">
                         <AvatarFallback className="bg-muted text-muted-foreground font-medium">
-                          {employee.name.split(" ").map(n => n[0]).join("")}
+                          {employee.name.split(" ").map((n: string) => n[0]).join("")}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -661,7 +661,7 @@ export default function AdminPayrollPage() {
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9">
                             <AvatarFallback className="bg-primary/10 text-primary text-sm">
-                              {employee.name.split(" ").map(n => n[0]).join("")}
+                              {employee.name.split(" ").map((n: string) => n[0]).join("")}
                             </AvatarFallback>
                           </Avatar>
                           <div>

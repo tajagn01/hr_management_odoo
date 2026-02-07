@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useCurrentEmployee, useEmployeeOverview, useAttendanceStatus, useCalendarMonth } from "@/lib/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,27 +55,19 @@ interface AttendanceStats {
 }
 
 export default function EmployeePage() {
-  const { data: session } = useSession();
   const { isConnected, connectionFailed } = useRealtime();
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
-  const [todayAttendance, setTodayAttendance] = useState<TodayAttendance | null>(null);
-  const [leaveStats, setLeaveStats] = useState<LeaveStats>({
-    pending: 0,
-    approved: 0,
-    rejected: 0,
-    remaining: 0,
-    total: 20,
+  const [calendarYear, setCalendarYear] = useState<number>(() => {
+    const now = new Date();
+    const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    return istNow.getUTCFullYear();
   });
-  const [attendanceStats, setAttendanceStats] = useState<AttendanceStats>({
-    present: 0,
-    absent: 0,
-    halfDay: 0,
-    leave: 0,
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => {
+    const now = new Date();
+    const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    return istNow.getUTCMonth() + 1;
   });
-  const [monthlyAttendance, setMonthlyAttendance] = useState<any[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -82,114 +76,90 @@ export default function EmployeePage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Helper to check if late
-  const isLateCheckIn = (checkInTimeStr: string | null) => {
-    if (!checkInTimeStr) return false;
-    // We need the Date object, but checkInTimeStr here is formatted string (10:00 AM).
-    // Better to check original data in fetchDashboardData
-    return false; // Handled in state
-  };
+  // ── React Query hooks ─────────────────────────────────
+  const { employeeId } = useCurrentEmployee();
+  const queryClient = useQueryClient();
+  const { data: overviewData, isLoading: overviewLoading } = useEmployeeOverview(employeeId ?? undefined);
 
-  const fetchDashboardData = useCallback(async () => {
-    if (!session?.user?.employeeId) return;
+  // Today's date in IST for status lookup
+  const todayDate = useMemo(() => {
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const now = new Date();
+    const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+    return `${istNow.getUTCFullYear()}-${String(istNow.getUTCMonth() + 1).padStart(2, '0')}-${String(istNow.getUTCDate()).padStart(2, '0')}`;
+  }, []);
 
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/employees/${session.user.employeeId}/overview`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to fetch dashboard data");
+  const { data: statusData } = useAttendanceStatus(employeeId ?? undefined, todayDate);
+  const { data: calendarData } = useCalendarMonth(employeeId, calendarYear, calendarMonth);
 
-      const data = await res.json();
+  // ── Derived state ─────────────────────────────────────
+  const loading = overviewLoading;
+  const employeeData = overviewData?.profile ?? null;
 
-      // 1. Employee Profile
-      if (data.profile) {
-        setEmployeeData(data.profile);
+  const todayAttendance = useMemo<TodayAttendance | null>(() => {
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const todayRecords = overviewData?.attendance || [];
+    const todayRecord = todayRecords.find((a: any) => a.date.startsWith(todayDate));
+    let status = statusData?.status?.toLowerCase() || (todayRecord ? "not-marked" : "absent");
+
+    if (!todayRecord) {
+      const onLeave = overviewData?.leaves?.find((l: any) => {
+        if (l.status !== "APPROVED") return false;
+        const start = new Date(l.startDate);
+        const end = new Date(l.endDate);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
+      });
+      if (onLeave && status !== "on_leave") {
+        return { status: "leave", checkIn: null, checkOut: null };
       }
-
-      // 2. Today's Attendance & Late Logic
-      const todayDate = new Date().toISOString().split('T')[0];
-      const todayRecord = data.attendance?.find((a: any) => a.date.startsWith(todayDate));
-
-      if (todayRecord) {
-        // Fetch accurate calculated status from API
-        const statusRes = await fetch(`/api/attendance/status?employeeId=${session.user.employeeId}&date=${todayDate}`);
-        const statusData = await statusRes.json();
-
-        // Use backend status (map to lowercase for frontend badge helper)
-        let status = statusData.status?.toLowerCase() || "not-marked";
-
-        setTodayAttendance({
-          status: status,
-          checkIn: todayRecord.checkIn ? new Date(todayRecord.checkIn).toLocaleTimeString('en-US', {
-            hour: '2-digit', minute: '2-digit', hour12: true
-          }) : null,
-          checkOut: todayRecord.checkOut ? new Date(todayRecord.checkOut).toLocaleTimeString('en-US', {
-            hour: '2-digit', minute: '2-digit', hour12: true
-          }) : null,
-        });
-      } else {
-        // Even if no record, check API for status (e.g. absent vs on-leave vs holiday)
-        const statusRes = await fetch(`/api/attendance/status?employeeId=${session.user.employeeId}&date=${todayDate}`);
-        const statusData = await statusRes.json();
-        const status = statusData.status?.toLowerCase() || "absent";
-
-        setTodayAttendance({ status, checkIn: null, checkOut: null });
-
-        // Check if On Leave (Override) - Keep for UI but status is already correct from API
-        const onLeave = data.leaves?.find((l: any) => {
-          if (l.status !== "APPROVED") return false;
-          const start = new Date(l.startDate);
-          const end = new Date(l.endDate);
-          const now = new Date();
-          now.setHours(0, 0, 0, 0);
-          return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
-        });
-
-        if (onLeave && status !== "on_leave") {
-          // Fallback if API didn't catch it yet for some reason (rare)
-          setTodayAttendance({ status: "leave", checkIn: null, checkOut: null });
-        }
-      }
-
-      // 3. Leave Stats (Remove hardcoded remaining)
-      if (data.leaves) {
-        const approvedCount = data.leaves.filter((l: any) => l.status === "APPROVED").length;
-        setLeaveStats((prev) => ({
-          ...prev,
-          pending: data.leaves.filter((l: any) => l.status === "PENDING").length,
-          approved: approvedCount,
-          rejected: data.leaves.filter((l: any) => l.status === "REJECTED").length,
-          remaining: 0, // Schema doesn't support balance yet
-          total: approvedCount, // Show Usage instead
-        }));
-      }
-
-      // 4. Attendance Stats
-      if (data.summary?.attendance) {
-        setAttendanceStats({
-          present: data.summary.attendance.present,
-          absent: data.summary.attendance.absent,
-          halfDay: data.summary.attendance.halfDay,
-          leave: 0 // Not in summary yet
-        });
-      }
-
-      // 5. Calendar Data
-      if (data.attendance) {
-        setMonthlyAttendance(data.attendance);
-      }
-
-    } catch (error) {
-      console.error("Error fetching dashboard:", error);
-    } finally {
-      setLoading(false);
     }
-  }, [session?.user?.employeeId]);
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchDashboardData();
-    }
-  }, [fetchDashboardData, session?.user?.id]);
+    return {
+      status,
+      checkIn: todayRecord?.checkIn
+        ? new Date(new Date(todayRecord.checkIn).getTime() + IST_OFFSET_MS).toLocaleTimeString('en-IN', {
+            hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC'
+          })
+        : null,
+      checkOut: todayRecord?.checkOut
+        ? new Date(new Date(todayRecord.checkOut).getTime() + IST_OFFSET_MS).toLocaleTimeString('en-IN', {
+            hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC'
+          })
+        : null,
+    };
+  }, [overviewData?.attendance, overviewData?.leaves, statusData, todayDate]);
+
+  const leaveStats = useMemo<LeaveStats>(() => {
+    if (!overviewData?.leaves) return { pending: 0, approved: 0, rejected: 0, remaining: 0, total: 0 };
+    const leaves = overviewData.leaves;
+    const approvedCount = leaves.filter((l: any) => l.status === "APPROVED").length;
+    return {
+      pending: leaves.filter((l: any) => l.status === "PENDING").length,
+      approved: approvedCount,
+      rejected: leaves.filter((l: any) => l.status === "REJECTED").length,
+      remaining: 0,
+      total: approvedCount,
+    };
+  }, [overviewData?.leaves]);
+
+  const monthlyAttendance = calendarData || [];
+
+  const attendanceStats = useMemo<AttendanceStats>(() => {
+    const records = calendarData || [];
+    return {
+      present: records.filter((a: any) => a.status === "present").length,
+      absent: records.filter((a: any) => a.status === "absent").length,
+      halfDay: records.filter((a: any) => a.status === "half-day").length,
+      leave: 0,
+    };
+  }, [calendarData]);
+
+  const handleCalendarMonthChange = useCallback((year: number, month: number) => {
+    setCalendarYear(year);
+    setCalendarMonth(month);
+  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -242,7 +212,7 @@ export default function EmployeePage() {
         <div className="flex items-center gap-4">
           <Avatar className="h-16 w-16 border-2 border-white/30">
             <AvatarFallback className="bg-white/20 text-white text-xl">
-              {employeeData.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+              {employeeData.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
             </AvatarFallback>
           </Avatar>
           <div>
@@ -393,7 +363,7 @@ export default function EmployeePage() {
       {/* Monthly Attendance Calendar */}
       <div className="grid gap-6 md:grid-cols-3">
         <div className="md:col-span-2">
-          <AttendanceCalendar attendanceData={monthlyAttendance} />
+          <AttendanceCalendar attendanceData={monthlyAttendance} onMonthChange={handleCalendarMonthChange} />
         </div>
         <div>
           {/* Attendance Stats Summary */}

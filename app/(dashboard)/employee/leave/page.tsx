@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useState, useEffect, useMemo } from "react";
+import { useCurrentEmployee, useEmployeeLeaves, useSubmitLeave } from "@/lib/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -88,48 +88,52 @@ const getLeaveTypeDisplayText = (type: string, balance: { paid: { remaining: num
 };
 
 export default function EmployeeLeavePage() {
-  const { data: session } = useSession();
+  const { employee, employeeId } = useCurrentEmployee();
+  const { data: leaveData, isLoading, isFetching, refetch } = useEmployeeLeaves(employeeId);
+  const submitLeave = useSubmitLeave();
+  const leaveRequests: LeaveRequest[] = leaveData?.leaveRequests ?? [];
+
   const [mounted, setMounted] = useState(false);
   const [leaveType, setLeaveType] = useState("PAID");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [employee, setEmployee] = useState<Employee | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Leave balance (could be fetched from API)
-  const leaveBalance = {
-    paid: { total: 15, used: 0, remaining: 15 },
-    sick: { total: 10, used: 0, remaining: 10 },
-    unpaid: { total: 5, used: 0, remaining: 5 },
-  };
-
-  // Calculate used leaves from requests
-  const calculateUsedLeaves = useCallback((requests: LeaveRequest[]) => {
+  // Calculate used leaves from requests (current month only — resets each month)
+  const calculateUsedLeaves = (requests: LeaveRequest[]) => {
     const balance = {
       paid: { total: 15, used: 0, remaining: 15 },
       sick: { total: 10, used: 0, remaining: 10 },
       unpaid: { total: 5, used: 0, remaining: 5 },
     };
 
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
     requests.forEach((req) => {
       if (req.status.toLowerCase() === "approved") {
+        // Only count leaves that start in the current month
+        const startDate = new Date(req.startDate);
+        if (startDate.getMonth() !== currentMonth || startDate.getFullYear() !== currentYear) {
+          return;
+        }
+
         const type = req.type.toLowerCase() as "paid" | "sick" | "unpaid";
         if (balance[type]) {
           balance[type].used += req.days;
-          balance[type].remaining = balance[type].total - balance[type].used;
+          balance[type].remaining = Math.max(0, balance[type].total - balance[type].used);
         }
       }
     });
 
     return balance;
-  }, []);
+  };
 
-  const [calculatedBalance, setCalculatedBalance] = useState(leaveBalance);
+  const calculatedBalance = useMemo(() => calculateUsedLeaves(leaveRequests), [leaveRequests]);
   const [calculatedDays, setCalculatedDays] = useState(0);
 
   // Calculate days when dates change
@@ -154,52 +158,9 @@ export default function EmployeeLeavePage() {
     }
   }, [fromDate, toDate]);
 
-  // Fetch employee data
-  const fetchEmployee = useCallback(async () => {
-    if (!session?.user?.email) return;
-
-    try {
-      const res = await fetch(`/api/employees?email=${session.user.email}`);
-      const data = await res.json();
-      if (data.employee) {
-        setEmployee(data.employee);
-        return data.employee.id;
-      }
-    } catch (error) {
-      console.error("Error fetching employee:", error);
-    }
-    return null;
-  }, [session?.user?.email]);
-
-  // Fetch leave requests
-  const fetchLeaveRequests = useCallback(async (employeeId: string) => {
-    try {
-      const res = await fetch(`/api/leave?employeeId=${employeeId}`);
-      const data = await res.json();
-      if (data.leaveRequests) {
-        setLeaveRequests(data.leaveRequests);
-        setCalculatedBalance(calculateUsedLeaves(data.leaveRequests));
-      }
-    } catch (error) {
-      console.error("Error fetching leave requests:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [calculateUsedLeaves]);
-
   useEffect(() => {
-    const loadData = async () => {
-      const empId = await fetchEmployee();
-      if (empId) {
-        await fetchLeaveRequests(empId);
-      } else {
-        setIsLoading(false);
-      }
-    };
-    loadData();
-    // mark mounted for client-only UI to avoid hydration mismatches
     setMounted(true);
-  }, [fetchEmployee, fetchLeaveRequests]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,31 +175,18 @@ export default function EmployeeLeavePage() {
     }
 
     try {
-      const res = await fetch("/api/leave", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId: employee.id,
-          type: leaveType,
-          startDate: fromDate,
-          endDate: toDate,
-          reason,
-        }),
+      await submitLeave.mutateAsync({
+        employeeId: employee.id,
+        type: leaveType,
+        startDate: fromDate,
+        endDate: toDate,
+        reason,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to submit leave request");
-      }
 
       setSuccess("Leave request submitted successfully!");
       setFromDate("");
       setToDate("");
       setReason("");
-      
-      // Refresh leave requests
-      await fetchLeaveRequests(employee.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit leave request");
     } finally {
@@ -246,11 +194,8 @@ export default function EmployeeLeavePage() {
     }
   };
 
-  const refreshData = async () => {
-    if (employee) {
-      setIsLoading(true);
-      await fetchLeaveRequests(employee.id);
-    }
+  const refreshData = () => {
+    refetch();
   };
 
   const pendingCount = leaveRequests.filter(r => r.status.toLowerCase() === "pending").length;
@@ -265,8 +210,8 @@ export default function EmployeeLeavePage() {
           <h1 className="text-3xl font-bold tracking-tight">Leave Management</h1>
           <p className="text-muted-foreground">Apply for leave and track your requests</p>
         </div>
-        <Button variant="outline" onClick={refreshData} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+        <Button variant="outline" onClick={refreshData} disabled={isFetching}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
@@ -533,9 +478,9 @@ export default function EmployeeLeavePage() {
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Calendar className="h-4 w-4" />
                         <span>
-                          {new Date(request.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          {new Date(request.startDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })}
                           {request.startDate !== request.endDate && (
-                            <> - {new Date(request.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
+                            <> - {new Date(request.endDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' })}</>
                           )}
                         </span>
                         <span className="text-muted-foreground">({request.days} day{request.days > 1 ? "s" : ""})</span>
@@ -562,7 +507,7 @@ export default function EmployeeLeavePage() {
                     </div>
                     <div className="text-right text-sm text-muted-foreground">
                       <p>Applied on</p>
-                      <p className="font-medium">{new Date(request.createdAt).toLocaleDateString()}</p>
+                      <p className="font-medium">{new Date(request.createdAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
                     </div>
                   </div>
                 </div>

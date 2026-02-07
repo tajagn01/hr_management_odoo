@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useState, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEmployees, useTodayAttendance, useLeaveRequests, useMonthlyAttendance, useYearlyAttendance } from "@/lib/hooks";
+import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -56,26 +58,26 @@ interface MonthlyAttendance {
 }
 
 export default function ManagerPage() {
-    const { data: session } = useSession();
     const { isConnected, connectionFailed } = useRealtime();
     const [mounted, setMounted] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [isRefreshing, setIsRefreshing] = useState(false);
     const [currentTime, setCurrentTime] = useState<Date | null>(null);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
 
-    const [stats, setStats] = useState({
-        totalTeamMembers: 0,
-        presentToday: 0,
-        absentToday: 0,
-        lateToday: 0,
-        pendingLeaves: 0,
-    });
+    const queryClient = useQueryClient();
 
-    const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-    const [monthlyAttendance, setMonthlyAttendance] = useState<MonthlyAttendance[]>([]);
-    const [yearlyData, setYearlyData] = useState<any>(null);
+    // React Query hooks — cached & shared
+    const { data: employeesData, isLoading: teamLoading, isFetching: teamFetching } = useEmployees();
+    const { data: attendanceData, isFetching: attendanceFetching } = useTodayAttendance();
+    const { data: leaveData } = useLeaveRequests();
+    const { data: monthlyData } = useMonthlyAttendance(selectedYear, selectedMonth);
+    const { data: yearlyRaw } = useYearlyAttendance(selectedYear);
+
+    const teamMembers: TeamMember[] = employeesData?.employees || [];
+    const monthlyAttendance: MonthlyAttendance[] = monthlyData?.monthlyRecords || [];
+    const yearlyData = yearlyRaw ?? null;
+    const loading = teamLoading;
+    const isRefreshing = teamFetching || attendanceFetching;
 
     useEffect(() => {
         setMounted(true);
@@ -84,149 +86,62 @@ export default function ManagerPage() {
         return () => clearInterval(timer);
     }, []);
 
-    const fetchTeamData = useCallback(async () => {
-        setIsRefreshing(true);
-        try {
-            // Fetch team members
-            const employeesRes = await fetch("/api/employees");
-            const employeesData = await employeesRes.json();
-            const team = employeesData.employees || [];
-            setTeamMembers(team);
+    const stats = useMemo(() => {
+        const team = teamMembers;
+        if (team.length === 0) return { totalTeamMembers: 0, presentToday: 0, absentToday: 0, lateToday: 0, pendingLeaves: 0 };
 
-            if (team.length === 0) {
-                setStats({
-                    totalTeamMembers: 0,
-                    presentToday: 0,
-                    absentToday: 0,
-                    lateToday: 0,
-                    pendingLeaves: 0,
-                });
-                setLoading(false);
-                setIsRefreshing(false);
-                return;
-            }
+        const records = attendanceData?.attendanceRecords || [];
+        const LATE_THRESHOLD_HOUR = 9;
+        const LATE_THRESHOLD_MINUTE = 30;
+        let presentCount = 0;
+        let lateCount = 0;
 
-            // Fetch today's attendance for team
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-
-            const attendanceRes = await fetch(
-                `/api/attendance?startDate=${today.toISOString()}&endDate=${tomorrow.toISOString()}`
-            );
-            const attendanceData = await attendanceRes.json();
-
-            // Calculate Strictly
-            let presentCount = 0;
-            let lateCount = 0;
-            const LATE_THRESHOLD_HOUR = 9;
-            const LATE_THRESHOLD_MINUTE = 30;
-
-            const records = attendanceData.attendanceRecords || [];
-
-            records.forEach((a: any) => {
-                const status = a.status?.toUpperCase();
-                const isPresent = status === "PRESENT" || status === "HALF_DAY" || (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE");
-
-                if (isPresent) {
-                    presentCount++;
-                    // Check Late
-                    if (a.checkIn) {
-                        const checkInTime = new Date(a.checkIn);
-                        const thresholdTime = new Date(checkInTime);
-                        thresholdTime.setHours(LATE_THRESHOLD_HOUR, LATE_THRESHOLD_MINUTE, 0, 0);
-                        if (checkInTime > thresholdTime) {
-                            lateCount++;
-                        }
-                    }
+        records.forEach((a: any) => {
+            const status = a.status?.toUpperCase();
+            const isPresent = status === "PRESENT" || status === "HALF_DAY" || (a.checkIn && status !== "ABSENT" && status !== "ON_LEAVE");
+            if (isPresent) {
+                presentCount++;
+                if (a.checkIn) {
+                    const checkInTime = new Date(a.checkIn);
+                    const thresholdTime = new Date(checkInTime);
+                    thresholdTime.setHours(LATE_THRESHOLD_HOUR, LATE_THRESHOLD_MINUTE, 0, 0);
+                    if (checkInTime > thresholdTime) lateCount++;
                 }
-            });
+            }
+        });
 
-            // Fetch leave requests
-            const leaveRes = await fetch("/api/leave");
-            const leaveData = await leaveRes.json();
+        const leaveRequests = leaveData?.leaveRequests || [];
+        const onLeaveToday = leaveRequests.filter((lr: any) => {
+            if (lr.status !== "APPROVED") return false;
+            const isTeam = team.some((m: TeamMember) => m.id === lr.employeeId);
+            if (!isTeam) return false;
+            const start = new Date(lr.startDate);
+            const end = new Date(lr.endDate);
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
+        }).length;
 
-            // Count On Leave Today (Approved & Overlapping)
-            const onLeaveToday = leaveData.leaveRequests?.filter((lr: any) => {
-                if (lr.status !== "APPROVED") return false;
-                // Ideally check if employee is in team members list too, assuming /api/leave filters by manager visibility/team or we assume we see all and must filter
-                const isTeam = team.some((m: TeamMember) => m.id === lr.employeeId);
-                if (!isTeam) return false;
+        const pendingLeaves = leaveRequests.filter((lr: any) => {
+            if (lr.status !== "PENDING") return false;
+            return team.some((m: TeamMember) => m.id === lr.employeeId);
+        }).length;
 
-                const start = new Date(lr.startDate);
-                const end = new Date(lr.endDate);
-                const now = new Date();
-                now.setHours(0, 0, 0, 0);
-                return now >= new Date(start.setHours(0, 0, 0, 0)) && now <= new Date(end.setHours(23, 59, 59, 999));
-            }).length || 0;
+        const calculatedAbsent = team.length - presentCount - onLeaveToday;
 
-            const pendingLeaves = leaveData.leaveRequests?.filter((lr: any) => {
-                const isPending = lr.status === "PENDING";
-                if (!isPending) return false;
-
-                // Strict Team Scope Check
-                const isTeam = team.some((m: TeamMember) => m.id === lr.employeeId);
-                return isTeam;
-            }).length || 0;
-
-            // Calculate Absent
-            const calculatedAbsent = team.length - presentCount - onLeaveToday;
-            const absentCount = calculatedAbsent > 0 ? calculatedAbsent : 0;
-
-            setStats({
-                totalTeamMembers: team.length,
-                presentToday: presentCount,
-                absentToday: absentCount,
-                lateToday: lateCount,
-                pendingLeaves,
-            });
-
-            setLoading(false);
-        } catch (error) {
-            console.error("Error fetching team data:", error);
-            setLoading(false);
-        } finally {
-            setIsRefreshing(false);
-        }
-    }, []);
-
-    const fetchMonthlyAttendance = useCallback(async () => {
-        try {
-            const res = await fetch(`/api/attendance/monthly?year=${selectedYear}&month=${selectedMonth}`);
-            const data = await res.json();
-            setMonthlyAttendance(data.monthlyRecords || []);
-        } catch (error) {
-            console.error("Error fetching monthly attendance:", error);
-        }
-    }, [selectedYear, selectedMonth]);
-
-    const fetchYearlyAttendance = useCallback(async () => {
-        try {
-            const res = await fetch(`/api/attendance/yearly?year=${selectedYear}`);
-            const data = await res.json();
-            setYearlyData(data);
-        } catch (error) {
-            console.error("Error fetching yearly attendance:", error);
-        }
-    }, [selectedYear]);
-
-    useEffect(() => {
-        fetchTeamData();
-    }, [fetchTeamData]);
-
-    useEffect(() => {
-        fetchMonthlyAttendance();
-    }, [fetchMonthlyAttendance]);
-
-    useEffect(() => {
-        fetchYearlyAttendance();
-    }, [fetchYearlyAttendance]);
+        return {
+            totalTeamMembers: team.length,
+            presentToday: presentCount,
+            absentToday: Math.max(0, calculatedAbsent),
+            lateToday: lateCount,
+            pendingLeaves,
+        };
+    }, [teamMembers, attendanceData, leaveData]);
 
     const handleRefresh = () => {
-        fetchTeamData();
-        fetchMonthlyAttendance();
-        fetchYearlyAttendance();
+        queryClient.invalidateQueries({ queryKey: queryKeys.employees.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.leave.all });
     };
 
     const attendanceRate = stats.totalTeamMembers > 0
@@ -387,7 +302,7 @@ export default function ManagerPage() {
                                             <div className="flex items-center gap-3">
                                                 <Avatar className="h-10 w-10">
                                                     <AvatarFallback className="text-xs">
-                                                        {member.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                                                        {member.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <div>

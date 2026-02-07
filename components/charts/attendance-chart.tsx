@@ -7,10 +7,12 @@ import { Calendar } from "lucide-react";
 
 // New: Attendance trends (Daily) — recreated from scratch
 export function AttendanceChart() {
-  // Automatically use current month and year
+  // Automatically use current month and year in IST (UTC+5:30)
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
   const now = new Date();
-  const DEFAULT_YEAR = now.getFullYear();
-  const DEFAULT_MONTH = now.getMonth() + 1; // JavaScript months are 0-indexed
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+  const DEFAULT_YEAR = istNow.getUTCFullYear();
+  const DEFAULT_MONTH = istNow.getUTCMonth() + 1; // JavaScript months are 0-indexed
 
   const [year, setYear] = useState<number>(DEFAULT_YEAR);
   const [month, setMonth] = useState<number>(DEFAULT_MONTH);
@@ -45,11 +47,10 @@ export function AttendanceChart() {
     setLoading(true);
     const fetchMonthly = async () => {
       try {
-        // Calculate date range for the selected month
-        const startDate = new Date(year, month - 1, 1); // First day of month
-        const endDate = new Date(year, month, 0); // Last day of month
-        startDate.setHours(0, 0, 0, 0);
-        endDate.setHours(23, 59, 59, 999);
+        // Calculate IST date range for the selected month
+        const lastDay = new Date(year, month, 0).getDate();
+        const startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0) - IST_OFFSET_MS);
+        const endDate = new Date(Date.UTC(year, month - 1, lastDay, 23, 59, 59, 999) - IST_OFFSET_MS);
 
         console.log(`📅 Fetching attendance for ${year}-${month}:`, {
           startDate: startDate.toISOString(),
@@ -68,11 +69,14 @@ export function AttendanceChart() {
 
         // Log first few records to debug
         if (json.attendanceRecords && json.attendanceRecords.length > 0) {
-          console.log('Sample records:', json.attendanceRecords.slice(0, 3).map((r: any) => ({
-            date: r.date,
-            status: r.status,
-            day: new Date(r.date).getDate()
-          })));
+          console.log('Sample records:', json.attendanceRecords.slice(0, 3).map((r: any) => {
+            const istDate = new Date(new Date(r.date).getTime() + IST_OFFSET_MS);
+            return {
+              date: r.date,
+              status: r.status,
+              day: istDate.getUTCDate()
+            };
+          }));
         }
 
 
@@ -130,8 +134,8 @@ export function AttendanceChart() {
     rawRecords.forEach((record: any) => {
       if (!record || !record.date) return;
 
-      const recordDate = new Date(record.date);
-      const day = recordDate.getDate();
+      const istDate = new Date(new Date(record.date).getTime() + IST_OFFSET_MS);
+      const day = istDate.getUTCDate();
 
       if (day >= 1 && day <= daysInMonth) {
         const status = (record.status || '').toString().toUpperCase();
@@ -200,7 +204,7 @@ export function AttendanceChart() {
     );
   }
 
-  const monthName = new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const monthName = new Date(year, month - 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
   return (
     <div className="w-full">

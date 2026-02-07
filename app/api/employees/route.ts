@@ -38,7 +38,9 @@ export async function GET(request: NextRequest) {
     if (id) {
       const employee = await getEmployeeByIdCached(id);
       if (!employee) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
-      return NextResponse.json({ employee });
+      return NextResponse.json({ employee }, {
+        headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=300" },
+      });
     }
 
     // 2. Get specific employee by Email
@@ -59,7 +61,9 @@ export async function GET(request: NextRequest) {
         role: userEnt.role
       };
 
-      return NextResponse.json({ employee: employeeData });
+      return NextResponse.json({ employee: employeeData }, {
+        headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=300" },
+      });
     }
 
     // 3. Get List (Cached)
@@ -113,7 +117,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized to view all employees" }, { status: 403 });
     }
 
-    return NextResponse.json({ employees, totalCount: employees.length });
+    return NextResponse.json({ employees, totalCount: employees.length }, {
+      headers: { "Cache-Control": "private, max-age=30, stale-while-revalidate=300" },
+    });
   } catch (error) {
     console.error("Error fetching employees:", error);
     return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 });

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useEmployeeByEmail, useUpdateProfile } from "@/lib/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,9 +44,6 @@ interface EmployeeData {
 export default function EmployeeProfilePage() {
   const { data: session } = useSession();
   const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [formData, setFormData] = useState({
     phone: "",
     address: "",
@@ -53,71 +51,40 @@ export default function EmployeeProfilePage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Fetch employee data
-  const fetchEmployeeData = useCallback(async () => {
-    if (!session?.user?.email) return;
-
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/employees?email=${session.user.email}`, {
-        cache: "no-store",
-        headers: { "Pragma": "no-cache" }
-      });
-      const data = await res.json();
-      if (data.employee) {
-        setEmployeeData(data.employee);
-        setFormData({
-          phone: data.employee.phone || "",
-          address: data.employee.address || "",
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching employee:", error);
-      setError("Failed to load profile data");
-    } finally {
-      setLoading(false);
-    }
-  }, [session?.user?.email]);
+  const { data: empData, isLoading: loading } = useEmployeeByEmail(session?.user?.email);
+  const employeeData = empData?.employee ?? null;
+  const updateProfile = useUpdateProfile();
+  const saving = updateProfile.isPending;
 
   useEffect(() => {
-    fetchEmployeeData();
-  }, [fetchEmployeeData]);
+    if (employeeData) {
+      setFormData({
+        phone: employeeData.phone || "",
+        address: employeeData.address || "",
+      });
+    }
+  }, [employeeData]);
 
   const handleSave = async () => {
     if (!employeeData) return;
 
-    setSaving(true);
     setError("");
     setSuccess("");
 
     try {
-      const res = await fetch("/api/employees", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: employeeData.id,
-          phone: formData.phone,
-          address: formData.address,
-        }),
+      await updateProfile.mutateAsync({
+        id: employeeData.id,
+        phone: formData.phone,
+        address: formData.address,
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to update profile");
-      }
 
       setSuccess("Profile updated successfully!");
       setIsEditing(false);
-      // Refresh employee data
-      await fetchEmployeeData();
 
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(""), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update profile");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -210,7 +177,7 @@ export default function EmployeeProfilePage() {
                 <Avatar className="h-24 w-24">
                   <AvatarImage src={employeeData.profileImage || ""} />
                   <AvatarFallback className="text-2xl bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400">
-                    {employeeData.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                    {employeeData.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
                   </AvatarFallback>
                 </Avatar>
                 {isEditing && (
@@ -236,7 +203,7 @@ export default function EmployeeProfilePage() {
                 </div>
                 <div className="flex items-center gap-3 text-sm text-muted-foreground mt-2">
                   <Calendar className="h-4 w-4" />
-                  <span>Joined {new Date(employeeData.joiningDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                  <span>Joined {new Date(employeeData.joiningDate).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span>
                 </div>
               </div>
             </div>
@@ -312,10 +279,11 @@ export default function EmployeeProfilePage() {
                   Joining Date
                 </label>
                 <div className="p-3 bg-muted rounded-lg">
-                  {new Date(employeeData.joiningDate).toLocaleDateString('en-US', {
+                  {new Date(employeeData.joiningDate).toLocaleDateString('en-IN', {
                     year: 'numeric',
                     month: 'long',
-                    day: 'numeric'
+                    day: 'numeric',
+                    timeZone: 'Asia/Kolkata'
                   })}
                 </div>
               </div>

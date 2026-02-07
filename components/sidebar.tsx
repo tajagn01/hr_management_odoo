@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { usePendingLeavesCount } from "@/lib/hooks";
 import {
   Tooltip,
   TooltipContent,
@@ -47,7 +48,7 @@ export function SidebarContent({
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith("/admin");
   const isManager = pathname?.startsWith("/manager");
-  const [pendingLeavesCount, setPendingLeavesCount] = useState(0);
+  const { data: pendingLeavesCount = 0 } = usePendingLeavesCount();
   const [mounted, setMounted] = useState(false);
 
   const adminGroups: NavGroup[] = [
@@ -110,21 +111,7 @@ export function SidebarContent({
 
   useEffect(() => {
     setMounted(true);
-    if (pathname === "/admin/leave-requests") {
-      const fetchPendingLeaves = async () => {
-        try {
-          const res = await fetch("/api/leave?status=PENDING");
-          const data = await res.json();
-          if (data.leaveRequests) {
-            setPendingLeavesCount(data.leaveRequests.length);
-          }
-        } catch (error) {
-          console.error("Error fetching pending leaves:", error);
-        }
-      };
-      fetchPendingLeaves();
-    }
-  }, [pathname]);
+  }, []);
 
   const groups = isAdmin ? adminGroups : isManager ? managerGroups : employeeGroups;
 

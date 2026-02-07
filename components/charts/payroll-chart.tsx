@@ -35,24 +35,24 @@ export function PayrollChart() {
     }
 
     const employees = employeesData.employees;
-    let totalPayroll = 0;
-    let totalBonus = 0;
+
+    // Group payroll totals by department (real DB data, no fake trends)
+    const deptMap = new Map<string, { payroll: number; bonus: number }>();
 
     employees.forEach((emp: any) => {
       if (emp.payroll) {
-        totalPayroll += emp.payroll.netSalary || 0;
-        // Estimate bonus as 10% of base salary
-        totalBonus += Math.round((emp.payroll.basicSalary || 0) * 0.1);
+        const dept = emp.department || 'Other';
+        const current = deptMap.get(dept) || { payroll: 0, bonus: 0 };
+        current.payroll += emp.payroll.netSalary || 0;
+        current.bonus += Math.round((emp.payroll.basicSalary || 0) * 0.1);
+        deptMap.set(dept, current);
       }
     });
 
-    // Generate monthly trends (estimated based on current total)
-    // In a real app, we'd have historical data. Here we project based on current snapshot for demo.
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const chartData = months.map((month, index) => ({
-      month,
-      payroll: Math.round(totalPayroll * (0.9 + index * 0.004)), // Slight upward trend
-      bonus: Math.round(totalBonus * (0.8 + Math.random() * 0.4)), // Variable bonuses
+    const chartData = Array.from(deptMap.entries()).map(([dept, values]) => ({
+      month: dept,
+      payroll: values.payroll,
+      bonus: values.bonus,
     }));
 
     return { data: chartData, loading: false };
@@ -109,7 +109,7 @@ export function PayrollChart() {
           stroke="#8b5cf6"
           strokeWidth={2}
           dot={{ fill: "#8b5cf6" }}
-          name="Monthly Payroll"
+          name="Net Payroll"
         />
         <Line
           type="monotone"

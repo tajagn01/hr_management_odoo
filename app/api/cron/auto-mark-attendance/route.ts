@@ -14,9 +14,9 @@ export async function GET(request: NextRequest) {
     try {
         // Security: Verify the request is from authorized source
         const authHeader = request.headers.get('authorization');
-        const cronSecret = process.env.CRON_SECRET || 'your-secret-key-change-this';
+        const cronSecret = process.env.CRON_SECRET;
 
-        if (authHeader !== `Bearer ${cronSecret}`) {
+        if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
             return NextResponse.json(
                 { error: 'Unauthorized' },
                 { status: 401 }
@@ -41,9 +41,11 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-        const endOfToday = new Date(startOfToday);
-        endOfToday.setHours(23, 59, 59, 999);
+        // Use IST (UTC+5:30) to match dashboard display timezone
+        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+        const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+        const startOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0));
+        const endOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999));
 
         // Check if ANYONE has marked attendance today
         const anyAttendanceToday = await prisma.attendance.findFirst({
@@ -101,13 +103,13 @@ export async function GET(request: NextRequest) {
             let workingHours: number | null = null;
 
             if (randomValue <= 0.70) {
-                // 70% PRESENT
+                // 70% PRESENT - 9:00 AM IST = 3:30 AM UTC
                 status = 'PRESENT';
                 checkIn = new Date(startOfToday);
-                checkIn.setHours(9, Math.floor(Math.random() * 30), 0, 0);
+                checkIn.setUTCHours(3, 30 + Math.floor(Math.random() * 30), 0, 0); // 9:00-9:30 AM IST
 
                 checkOut = new Date(startOfToday);
-                checkOut.setHours(17, Math.floor(Math.random() * 60), 0, 0);
+                checkOut.setUTCHours(11, 30 + Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM IST
 
                 workingHours = 8.0;
             } else if (randomValue <= 0.90) {
@@ -117,19 +119,26 @@ export async function GET(request: NextRequest) {
                 checkOut = null;
                 workingHours = 0;
             } else {
-                // 10% LATE
+                // 10% LATE - 9:45 AM IST = 4:15 AM UTC
                 status = 'LATE';
                 checkIn = new Date(startOfToday);
-                checkIn.setHours(9, 45 + Math.floor(Math.random() * 30), 0, 0);
+                checkIn.setUTCHours(4, 15 + Math.floor(Math.random() * 30), 0, 0); // 9:45-10:15 AM IST
 
                 checkOut = new Date(startOfToday);
-                checkOut.setHours(17, Math.floor(Math.random() * 60), 0, 0);
+                checkOut.setUTCHours(11, 30 + Math.floor(Math.random() * 60), 0, 0); // 5:00-6:00 PM IST
 
                 workingHours = 7.5;
             }
 
-            await prisma.attendance.create({
-                data: {
+            await prisma.attendance.upsert({
+                where: {
+                    employeeId_date: {
+                        employeeId: employee.id,
+                        date: startOfToday
+                    }
+                },
+                update: {}, // Don't update if exists
+                create: {
                     employeeId: employee.id,
                     date: startOfToday,
                     // @ts-ignore

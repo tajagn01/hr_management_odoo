@@ -30,7 +30,9 @@ export async function GET() {
             }
         });
 
-        return NextResponse.json({ managers });
+        return NextResponse.json({ managers }, {
+            headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=3600" },
+        });
     } catch (error) {
         console.error("Error fetching managers:", error);
         return NextResponse.json(

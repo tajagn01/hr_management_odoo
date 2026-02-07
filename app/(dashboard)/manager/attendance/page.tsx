@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import { useAttendanceByDateRange } from "@/lib/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -32,35 +35,23 @@ interface AttendanceRecord {
 
 export default function TeamAttendancePage() {
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-    const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [isRefreshing, setIsRefreshing] = useState(false);
+    const queryClient = useQueryClient();
 
-    const fetchAttendance = useCallback(async () => {
-        setIsRefreshing(true);
-        try {
-            const startDate = new Date(selectedDate);
-            startDate.setHours(0, 0, 0, 0);
-            const endDate = new Date(selectedDate);
-            endDate.setHours(23, 59, 59, 999);
-
-            const res = await fetch(
-                `/api/attendance?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`
-            );
-            const data = await res.json();
-            setAttendanceRecords(data.attendanceRecords || []);
-            setLoading(false);
-        } catch (error) {
-            console.error("Error fetching attendance:", error);
-            setLoading(false);
-        } finally {
-            setIsRefreshing(false);
-        }
+    // Compute IST date boundaries for selected date
+    const { startDate, endDate } = useMemo(() => {
+        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+        const selDate = new Date(selectedDate.getTime() + IST_OFFSET_MS);
+        const start = new Date(Date.UTC(
+            selDate.getUTCFullYear(), selDate.getUTCMonth(), selDate.getUTCDate(), 0, 0, 0, 0
+        ) - IST_OFFSET_MS);
+        const end = new Date(Date.UTC(
+            selDate.getUTCFullYear(), selDate.getUTCMonth(), selDate.getUTCDate(), 23, 59, 59, 999
+        ) - IST_OFFSET_MS);
+        return { startDate: start.toISOString(), endDate: end.toISOString() };
     }, [selectedDate]);
 
-    useEffect(() => {
-        fetchAttendance();
-    }, [fetchAttendance]);
+    const { data: attendanceResponse, isLoading: loading, isFetching: isRefreshing } = useAttendanceByDateRange(startDate, endDate);
+    const attendanceRecords: AttendanceRecord[] = attendanceResponse?.attendanceRecords || [];
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -121,7 +112,7 @@ export default function TeamAttendancePage() {
                         })}
                     </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchAttendance} disabled={isRefreshing}>
+                <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.attendance.all })} disabled={isRefreshing}>
                     <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                     Refresh
                 </Button>
@@ -219,7 +210,7 @@ export default function TeamAttendancePage() {
                                                 {getStatusIcon(record.status)}
                                                 <Avatar className="h-10 w-10">
                                                     <AvatarFallback className="text-xs">
-                                                        {record.employee.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                                                        {record.employee.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
                                                     </AvatarFallback>
                                                 </Avatar>
                                                 <div>

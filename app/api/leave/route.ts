@@ -57,7 +57,9 @@ export async function GET(request: NextRequest) {
       employee: lr.employee?.fullName
     })), null, 2));
 
-    return NextResponse.json({ leaveRequests });
+    return NextResponse.json({ leaveRequests }, {
+      headers: { "Cache-Control": "private, max-age=10, stale-while-revalidate=120" },
+    });
   } catch (error) {
     console.error("Error fetching leave requests:", error);
     return NextResponse.json({ error: "Failed to fetch leave requests" }, { status: 500 });
@@ -98,6 +100,42 @@ export async function POST(request: NextRequest) {
     // Validate that days is at least 1
     if (days < 1) {
       return NextResponse.json({ error: "End date must be on or after start date" }, { status: 400 });
+    }
+
+    // Monthly leave limits
+    const LEAVE_LIMITS: Record<string, number> = {
+      PAID: 15,
+      SICK: 10,
+      UNPAID: 5,
+    };
+
+    // Check remaining balance for the current month
+    const leaveTypeUpper = type.toUpperCase();
+    const limit = LEAVE_LIMITS[leaveTypeUpper];
+    if (limit !== undefined) {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+      const usedThisMonth = await prisma.leaveRequest.aggregate({
+        _sum: { days: true },
+        where: {
+          employeeId,
+          type: leaveTypeUpper,
+          status: "APPROVED",
+          startDate: { gte: monthStart, lte: monthEnd },
+        },
+      });
+
+      const usedDays = usedThisMonth._sum.days || 0;
+      const remaining = limit - usedDays;
+
+      if (days > remaining) {
+        return NextResponse.json(
+          { error: `Insufficient ${leaveTypeUpper.toLowerCase()} leave balance. ${remaining} day(s) remaining this month.` },
+          { status: 400 }
+        );
+      }
     }
 
     // Create leave request

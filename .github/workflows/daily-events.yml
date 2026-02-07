@@ -1,0 +1,18 @@
+name: Daily Events Check (Birthday & Anniversary)
+
+on:
+  schedule:
+    # Runs at 12:00 AM IST (6:30 PM UTC previous day) every day
+    - cron: '30 18 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  daily-events:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Trigger Daily Events Check
+        run: |
+          curl -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            ${{ secrets.APP_URL }}/api/cron/birthday

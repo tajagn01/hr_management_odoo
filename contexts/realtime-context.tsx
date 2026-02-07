@@ -124,11 +124,13 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         presentToday: prev.presentToday + 1,
       }));
+      window.dispatchEvent(new CustomEvent("attendance:checkin", { detail: data }));
     });
 
     newSocket.on("attendance:checkout", (data: any) => {
       console.log("📥 Received attendance:checkout", data);
       // Handle check-out if needed
+      window.dispatchEvent(new CustomEvent("attendance:checkout", { detail: data }));
     });
 
     newSocket.on("stats:dashboard", (data: any) => {

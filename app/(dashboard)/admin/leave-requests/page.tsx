@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
+import { useLeaveRequests, useLeaveAction } from "@/lib/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -81,34 +84,15 @@ const getLeaveTypeBadge = (type: string) => {
 };
 
 export default function AdminLeaveRequestsPage() {
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: leaveData, isLoading, refetch: refetchLeaves } = useLeaveRequests({ recentDays: 2 });
+  const leaveRequests: LeaveRequest[] = leaveData?.leaveRequests || [];
+  const leaveAction = useLeaveAction();
   const [filter, setFilter] = useState("all");
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [adminComment, setAdminComment] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [actionType, setActionType] = useState<"approve" | "reject" | null>(null);
-
-  const fetchLeaveRequests = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      // Fetch ALL requests from the last 2 days (pending, approved, rejected)
-      const res = await fetch(`/api/leave?recentDays=2`);
-      const data = await res.json();
-      if (data.leaveRequests) {
-        setLeaveRequests(data.leaveRequests);
-      }
-    } catch (error) {
-      console.error("Error fetching leave requests:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchLeaveRequests();
-  }, [fetchLeaveRequests]);
 
   const handleAction = (request: LeaveRequest, action: "approve" | "reject") => {
     setSelectedRequest(request);
@@ -119,26 +103,13 @@ export default function AdminLeaveRequestsPage() {
 
   const processRequest = async () => {
     if (!selectedRequest || !actionType) return;
-
     setIsProcessing(true);
     try {
-      const res = await fetch("/api/leave", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: selectedRequest.id,
-          status: actionType === "approve" ? "APPROVED" : "REJECTED",
-          adminComment: adminComment || null,
-        }),
+      await leaveAction.mutateAsync({
+        id: selectedRequest.id,
+        status: actionType === "approve" ? "APPROVED" : "REJECTED",
+        adminComment: adminComment || null,
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to process request");
-      }
-
-      // Refresh data
-      await fetchLeaveRequests();
       setIsDialogOpen(false);
       setSelectedRequest(null);
       setAdminComment("");
@@ -165,7 +136,7 @@ export default function AdminLeaveRequestsPage() {
 
         {/* Desktop Actions */}
         <div className="hidden md:flex">
-          <Button variant="outline" onClick={fetchLeaveRequests} disabled={isLoading}>
+          <Button variant="outline" onClick={() => refetchLeaves()} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -180,7 +151,7 @@ export default function AdminLeaveRequestsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={fetchLeaveRequests} disabled={isLoading}>
+              <DropdownMenuItem onClick={() => refetchLeaves()} disabled={isLoading}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </DropdownMenuItem>
@@ -308,7 +279,7 @@ export default function AdminLeaveRequestsPage() {
                       <div className="bg-muted/30 rounded-lg p-3 mb-3">
                         <div className="flex items-center gap-3 mb-2">
                           <Avatar className="h-8 w-8 border border-background">
-                            <AvatarFallback className="bg-blue-100 text-blue-700 text-xs">{request.employee.fullName.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                            <AvatarFallback className="bg-blue-100 text-blue-700 text-xs">{request.employee.fullName.split(' ').map((n: string) => n[0]).join('')}</AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="text-sm font-semibold leading-none">{request.employee.fullName}</p>

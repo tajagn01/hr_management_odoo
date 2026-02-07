@@ -15,4 +15,4 @@ jobs:
         run: |
           curl -X GET \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://your-app.vercel.app/api/cron/auto-mark-attendance
+            ${{ secrets.APP_URL }}/api/cron/auto-mark-attendance

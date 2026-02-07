@@ -1,26 +1,33 @@
 import { NextResponse } from "next/server";
-import { checkBirthdays } from "@/lib/birthday-checker";
+import { checkDailyEvents } from "@/lib/daily-event-checker";
 
 // This API route can be called by a cron job daily
 export async function GET(request: Request) {
     try {
         // Optional: Add authorization header check for security
         const authHeader = request.headers.get("authorization");
-        const cronSecret = process.env.CRON_SECRET || "your-secret-key-here";
+        const cronSecret = process.env.CRON_SECRET;
 
-        if (authHeader !== `Bearer ${cronSecret}`) {
+        if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
             );
         }
 
-        const result = await checkBirthdays();
+        const result = await checkDailyEvents();
+
+        if (!result.success) {
+            throw result.error;
+        }
 
         return NextResponse.json({
-            success: result.success,
-            message: `Checked birthdays. Found ${result.count || 0} birthday(s) today.`,
-            count: result.count
+            success: true,
+            message: `Checked daily events. Found ${result.birthdayCount} birthday(s) and ${result.anniversaryCount} anniversary(s).`,
+            counts: {
+                birthdays: result.birthdayCount,
+                anniversaries: result.anniversaryCount
+            }
         });
     } catch (error) {
         console.error("Error in birthday cron:", error);
@@ -34,12 +41,19 @@ export async function GET(request: Request) {
 // Allow manual trigger for testing (remove in production)
 export async function POST() {
     try {
-        const result = await checkBirthdays();
+        const result = await checkDailyEvents();
+
+        if (!result.success) {
+            throw result.error;
+        }
 
         return NextResponse.json({
-            success: result.success,
-            message: `Manual birthday check completed. Found ${result.count || 0} birthday(s).`,
-            count: result.count
+            success: true,
+            message: `Manual daily event check completed. Found ${result.birthdayCount} birthday(s) and ${result.anniversaryCount} anniversary(s).`,
+            counts: {
+                birthdays: result.birthdayCount,
+                anniversaries: result.anniversaryCount
+            }
         });
     } catch (error) {
         console.error("Error in manual birthday check:", error);

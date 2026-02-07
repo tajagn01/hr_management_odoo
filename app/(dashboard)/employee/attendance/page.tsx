@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +18,9 @@ import {
   Timer,
   Loader2
 } from "lucide-react";
+import { useCurrentEmployee, useEmployeeAttendance, useCalendarMonth, useAttendanceCheckInOut } from "@/lib/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/query-keys";
 
 interface AttendanceRecord {
   id: string;
@@ -51,7 +53,10 @@ const getStatusBadge = (status: string) => {
 };
 
 export default function EmployeeAttendancePage() {
-  const { data: session } = useSession();
+  const queryClient = useQueryClient();
+  const { employeeId, isLoading: isEmployeeLoading } = useCurrentEmployee();
+  const checkInOutMutation = useAttendanceCheckInOut();
+
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [isCheckedOut, setIsCheckedOut] = useState(false);
   const [checkInTime, setCheckInTime] = useState<Date | null>(null);
@@ -59,10 +64,6 @@ export default function EmployeeAttendancePage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [elapsedTime, setElapsedTime] = useState<string>("00:00:00");
   const [mounted, setMounted] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [monthlyAttendance, setMonthlyAttendance] = useState<AttendanceRecord[]>([]);
-  const [employeeId, setEmployeeId] = useState<string | null>(null);
   
   // Add month/year selection state
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -84,6 +85,100 @@ export default function EmployeeAttendancePage() {
     { value: 11, label: "November" },
     { value: 12, label: "December" },
   ];
+
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+
+  // ── Today's attendance query ────────────────────────────
+  const now = new Date();
+  const todayStart = useMemo(() => new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString(), [now.getFullYear(), now.getMonth(), now.getDate()]);
+  const todayEnd = useMemo(() => new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1)).toISOString(), [now.getFullYear(), now.getMonth(), now.getDate()]);
+  const todayQuery = useEmployeeAttendance(employeeId, todayStart, todayEnd);
+
+  // ── Monthly attendance query (for table view) ──────────
+  const monthStart = useMemo(() => new Date(Date.UTC(selectedYear, selectedMonth - 1, 1)).toISOString(), [selectedYear, selectedMonth]);
+  const monthEnd = useMemo(() => new Date(Date.UTC(selectedYear, selectedMonth, 0, 23, 59, 59, 999)).toISOString(), [selectedYear, selectedMonth]);
+  const monthlyQuery = useEmployeeAttendance(employeeId, monthStart, monthEnd);
+
+  // ── Calendar queries (current month + previous month) ──
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const prevMonth = currentMonth === 1 ? 12 : currentMonth - 1;
+  const prevYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+  const calendarCurrentQuery = useCalendarMonth(employeeId, currentYear, currentMonth);
+  const calendarPrevQuery = useCalendarMonth(employeeId, prevYear, prevMonth);
+
+  // Track which extra months have been fetched for the calendar
+  const fetchedMonthsRef = useRef<Set<string>>(new Set([`${currentYear}-${currentMonth}`, `${prevYear}-${prevMonth}`]));
+  const [extraCalendarData, setExtraCalendarData] = useState<{date: string; status: string}[]>([]);
+
+  // Combine calendar data from queries + any extra months fetched via navigation
+  const calendarAttendance = useMemo(() => {
+    const currentData = (calendarCurrentQuery.data || []).map((r: any) => ({ date: r.date, status: r.status }));
+    const prevData = (calendarPrevQuery.data || []).map((r: any) => ({ date: r.date, status: r.status }));
+    return [...prevData, ...currentData, ...extraCalendarData];
+  }, [calendarCurrentQuery.data, calendarPrevQuery.data, extraCalendarData]);
+
+  // When user navigates to a new month in the calendar, fetch that month's data
+  const handleCalendarMonthChange = async (year: number, month: number) => {
+    const key = `${year}-${month}`;
+    if (fetchedMonthsRef.current.has(key) || !employeeId) return;
+    fetchedMonthsRef.current.add(key);
+
+    try {
+      const firstDay = new Date(Date.UTC(year, month - 1, 1));
+      const lastDay = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+      const res = await fetch(
+        `/api/attendance?employeeId=${employeeId}&startDate=${firstDay.toISOString()}&endDate=${lastDay.toISOString()}`
+      );
+      const data = await res.json();
+      if (data.attendanceRecords && Array.isArray(data.attendanceRecords)) {
+        const mapped = data.attendanceRecords.map((record: any) => ({
+          date: record.date,
+          status: record.status?.toLowerCase().replace('_', '-') || 'not-marked',
+        }));
+        if (mapped.length > 0) {
+          setExtraCalendarData(prev => {
+            const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+            const filtered = prev.filter(r => !r.date.startsWith(monthPrefix));
+            return [...filtered, ...mapped];
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching calendar month:', error);
+    }
+  };
+
+  // Format monthly records for the table
+  const monthlyAttendance: AttendanceRecord[] = useMemo(() => {
+    const records = monthlyQuery.data?.attendanceRecords;
+    if (!records || !Array.isArray(records)) return [];
+    return records.map((record: any) => {
+      const date = new Date(record.date);
+      const checkIn = record.checkIn ? new Date(record.checkIn) : null;
+      const checkOut = record.checkOut ? new Date(record.checkOut) : null;
+
+      let hours = "-";
+      if (checkIn && checkOut) {
+        const diff = checkOut.getTime() - checkIn.getTime();
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        hours = `${h}h ${m}m`;
+      }
+
+      return {
+        id: record.id,
+        date: record.date,
+        day: date.toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'Asia/Kolkata' }),
+        checkIn: checkIn ? new Date(checkIn.getTime() + IST_OFFSET_MS).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' }) : null,
+        checkOut: checkOut ? new Date(checkOut.getTime() + IST_OFFSET_MS).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' }) : null,
+        status: record.status?.toLowerCase().replace('_', '-') || 'not-marked',
+        hours,
+      };
+    });
+  }, [monthlyQuery.data, IST_OFFSET_MS]);
+
+  const loading = isEmployeeLoading || todayQuery.isLoading || monthlyQuery.isLoading;
 
   // Initialize and update current time
   useEffect(() => {
@@ -108,118 +203,16 @@ export default function EmployeeAttendancePage() {
     }
   }, [currentTime, checkInTime, isCheckedOut]);
 
-  // Fetch employee ID
-  const fetchEmployeeId = useCallback(async () => {
-    if (!session?.user?.email) return null;
-
-    try {
-      const res = await fetch(`/api/employees?email=${session.user.email}`);
-      const data = await res.json();
-      if (data.employee) {
-        setEmployeeId(data.employee.id);
-        return data.employee.id;
-      }
-    } catch (error) {
-      console.error("Error fetching employee:", error);
-    }
-    return null;
-  }, [session?.user?.email]);
-
-  // Fetch today's attendance
-  const fetchTodayAttendance = useCallback(async (empId: string) => {
-    try {
-      // Use UTC boundaries to avoid timezone drift when querying the API
-      const now = new Date();
-      const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-      const tomorrow = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1));
-
-      const res = await fetch(
-        `/api/attendance?employeeId=${empId}&startDate=${today.toISOString()}&endDate=${tomorrow.toISOString()}`
-      );
-      const data = await res.json();
-
-      if (data.attendanceRecords && data.attendanceRecords.length > 0) {
-        const todayRecord = data.attendanceRecords[0];
-        setIsCheckedIn(!!todayRecord.checkIn);
-        setIsCheckedOut(!!todayRecord.checkOut);
-        setCheckInTime(todayRecord.checkIn ? new Date(todayRecord.checkIn) : null);
-        setCheckOutTime(todayRecord.checkOut ? new Date(todayRecord.checkOut) : null);
-      }
-    } catch (error) {
-      console.error("Error fetching today's attendance:", error);
-    }
-  }, []);
-
-  // Fetch monthly attendance for selected month/year
-  const fetchMonthlyAttendance = useCallback(async (empId: string, year: number, month: number) => {
-    try {
-      // Use selected month/year instead of current month
-      const firstDayOfMonth = new Date(Date.UTC(year, month - 1, 1));
-      const lastDayOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
-
-      const res = await fetch(
-        `/api/attendance?employeeId=${empId}&startDate=${firstDayOfMonth.toISOString()}&endDate=${lastDayOfMonth.toISOString()}`
-      );
-      const data = await res.json();
-
-      if (data.attendanceRecords && Array.isArray(data.attendanceRecords)) {
-        const formatted = data.attendanceRecords.map((record: any) => {
-          const date = new Date(record.date);
-          const checkIn = record.checkIn ? new Date(record.checkIn) : null;
-          const checkOut = record.checkOut ? new Date(record.checkOut) : null;
-
-          let hours = "-";
-          if (checkIn && checkOut) {
-            const diff = checkOut.getTime() - checkIn.getTime();
-            const h = Math.floor(diff / (1000 * 60 * 60));
-            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            hours = `${h}h ${m}m`;
-          }
-
-          return {
-            id: record.id,
-            date: record.date,
-            day: date.toLocaleDateString('en-US', { weekday: 'long' }),
-            checkIn: checkIn ? checkIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : null,
-            checkOut: checkOut ? checkOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : null,
-            status: record.status?.toLowerCase().replace('_', '-') || 'not-marked',
-            hours,
-          };
-        });
-        setMonthlyAttendance(formatted);
-      } else {
-        setMonthlyAttendance([]);
-      }
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching monthly attendance:", error);
-      setLoading(false);
-    }
-  }, []);
-
-  // Load data on mount
+  // Derive check-in/check-out state from today's attendance query
   useEffect(() => {
-    const loadData = async () => {
-      const empId = await fetchEmployeeId();
-      if (empId) {
-        await Promise.all([
-          fetchTodayAttendance(empId),
-          fetchMonthlyAttendance(empId, selectedYear, selectedMonth),
-        ]);
-      } else {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, [fetchEmployeeId, fetchTodayAttendance, fetchMonthlyAttendance, selectedYear, selectedMonth]);
-
-  // Reload monthly data when month/year changes
-  useEffect(() => {
-    if (employeeId) {
-      setLoading(true);
-      fetchMonthlyAttendance(employeeId, selectedYear, selectedMonth);
+    if (todayQuery.data?.attendanceRecords?.length > 0) {
+      const todayRecord = todayQuery.data.attendanceRecords[0];
+      setIsCheckedIn(!!todayRecord.checkIn);
+      setIsCheckedOut(!!todayRecord.checkOut);
+      setCheckInTime(todayRecord.checkIn ? new Date(todayRecord.checkIn) : null);
+      setCheckOutTime(todayRecord.checkOut ? new Date(todayRecord.checkOut) : null);
     }
-  }, [selectedYear, selectedMonth, employeeId, fetchMonthlyAttendance]);
+  }, [todayQuery.data]);
 
   const handleCheckIn = async () => {
     if (!employeeId) return;
@@ -230,58 +223,29 @@ export default function EmployeeAttendancePage() {
     const prevCheckInTime = checkInTime;
 
     // Optimistic Update
-    const now = new Date();
-    setCheckInTime(now);
+    const optimisticNow = new Date();
+    setCheckInTime(optimisticNow);
     setIsCheckedIn(true);
     setIsCheckedOut(false);
     setCheckOutTime(null);
 
     try {
-      setSubmitting(true);
-      const res = await fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId, type: "checkIn" }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        // Update with server time just to be precise
-        const serverNow = data.attendance?.checkIn ? new Date(data.attendance.checkIn) : new Date();
-        setCheckInTime(serverNow);
-        setIsCheckedIn(!!data.attendance?.checkIn);
-
-        // Refresh data in background without blocking UI
-        if (employeeId) {
-          fetchMonthlyAttendance(employeeId, selectedYear, selectedMonth);
-          fetchTodayAttendance(employeeId);
-        }
+      const data = await checkInOutMutation.mutateAsync({ employeeId, type: "checkIn" });
+      // Update with server time
+      const serverNow = data.attendance?.checkIn ? new Date(data.attendance.checkIn) : new Date();
+      setCheckInTime(serverNow);
+      setIsCheckedIn(!!data.attendance?.checkIn);
+    } catch (error: any) {
+      const message = error?.message || "Failed to check in";
+      if (message.includes("leave")) {
+        alert(`❌ Cannot Mark Attendance\n\nYou are on approved leave today.\n\nPlease contact HR if this is incorrect.`);
       } else {
-        // Rollback on error
-        const error = await res.json();
-        
-        // Show detailed error message
-        if (error.error && error.error.includes("leave")) {
-          // Special handling for leave error
-          const leaveType = error.leaveType || "leave";
-          alert(`❌ Cannot Mark Attendance\n\nYou are on approved ${leaveType.toLowerCase()} today.\n\nPlease contact HR if this is incorrect.`);
-        } else {
-          alert(error.error || "Failed to check in");
-        }
-        
-        setIsCheckedIn(prevIsCheckedIn);
-        setIsCheckedOut(prevIsCheckedOut);
-        setCheckInTime(prevCheckInTime);
+        alert(message);
       }
-    } catch (error) {
-      console.error("Error checking in:", error);
-      alert("Failed to check in");
       // Rollback on error
       setIsCheckedIn(prevIsCheckedIn);
       setIsCheckedOut(prevIsCheckedOut);
       setCheckInTime(prevCheckInTime);
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -293,44 +257,20 @@ export default function EmployeeAttendancePage() {
     const prevCheckOutTime = checkOutTime;
 
     // Optimistic Update
-    const now = new Date();
-    setCheckOutTime(now);
+    const optimisticNow = new Date();
+    setCheckOutTime(optimisticNow);
     setIsCheckedOut(true);
 
     try {
-      setSubmitting(true);
-      const res = await fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId, type: "checkOut" }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const serverNow = data.attendance?.checkOut ? new Date(data.attendance.checkOut) : new Date();
-        setCheckOutTime(serverNow);
-        setIsCheckedOut(!!data.attendance?.checkOut);
-
-        // Refresh data in background without blocking UI
-        if (employeeId) {
-          fetchMonthlyAttendance(employeeId, selectedYear, selectedMonth);
-          fetchTodayAttendance(employeeId);
-        }
-      } else {
-        // Rollback on error
-        const error = await res.json();
-        alert(error.error || "Failed to check out");
-        setIsCheckedOut(prevIsCheckedOut);
-        setCheckOutTime(prevCheckOutTime);
-      }
-    } catch (error) {
-      console.error("Error checking out:", error);
-      alert("Failed to check out");
+      const data = await checkInOutMutation.mutateAsync({ employeeId, type: "checkOut" });
+      const serverNow = data.attendance?.checkOut ? new Date(data.attendance.checkOut) : new Date();
+      setCheckOutTime(serverNow);
+      setIsCheckedOut(!!data.attendance?.checkOut);
+    } catch (error: any) {
+      alert(error?.message || "Failed to check out");
       // Rollback on error
       setIsCheckedOut(prevIsCheckedOut);
       setCheckOutTime(prevCheckOutTime);
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -407,9 +347,9 @@ export default function EmployeeAttendancePage() {
                 <Button
                   onClick={handleCheckIn}
                   className="w-full bg-green-500 hover:bg-green-600"
-                  disabled={isCheckedIn}
+                  disabled={isCheckedIn || checkInOutMutation.isPending}
                 >
-                  <LogIn className="h-4 w-4 mr-2" />
+                  {checkInOutMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogIn className="h-4 w-4 mr-2" />}
                   Check In
                 </Button>
               )}
@@ -434,8 +374,9 @@ export default function EmployeeAttendancePage() {
                   onClick={handleCheckOut}
                   variant="outline"
                   className="w-full border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                  disabled={checkInOutMutation.isPending}
                 >
-                  <LogOut className="h-4 w-4 mr-2" />
+                  {checkInOutMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <LogOut className="h-4 w-4 mr-2" />}
                   Check Out
                 </Button>
               ) : (
@@ -595,10 +536,7 @@ export default function EmployeeAttendancePage() {
               </CardContent>
             </Card>
           ) : (
-            <AttendanceCalendar attendanceData={monthlyAttendance.map(record => ({
-              date: record.date,
-              status: record.status // Keep original status format
-            }))} />
+            <AttendanceCalendar attendanceData={calendarAttendance} onMonthChange={handleCalendarMonthChange} />
           )}
         </TabsContent>
       </Tabs>

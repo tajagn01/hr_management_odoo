@@ -11,10 +11,7 @@
     "postinstall": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "auto-mark": "tsx scripts/auto-mark-attendance.ts",
-    "test-auto-mark": "tsx scripts/test-auto-mark.ts",
-    "start-scheduler": "node scripts/attendance-scheduler.js",
-    "clear-attendance": "tsx scripts/clear-attendance.ts",
-    "seed-january": "tsx seed-january-data.ts"
+    "start-scheduler": "node scripts/attendance-scheduler.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

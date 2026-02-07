@@ -68,19 +68,17 @@ export const payrollSelect = {
 // AGGREGATED "BFF" FETCHER (Staff Engineer Level)
 // -----------------------------------------------------------------------------
 
-export const getEmployeeOverviewCached = unstable_cache(
-    async (employeeId: string) => {
-        // Parallel Fetching: The "BFF" Pattern inside the Cache Worker
+export const getEmployeeOverviewCached = async (employeeId: string) => {
+        // Parallel Fetching: The "BFF" Pattern
         const start = performance.now();
 
-        // Calculate date ranges for "Recent Activity" (e.g., last 30 days)
-        const today = new Date();
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(today.getDate() - 30);
-
-        // Normalize dates for index hit
-        today.setHours(23, 59, 59, 999);
-        thirtyDaysAgo.setHours(0, 0, 0, 0);
+        // Calculate date ranges for last 90 days (3 months) to support calendar navigation
+        // Use IST (UTC+5:30) to match the dashboard display timezone
+        const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // 5 hours 30 minutes in milliseconds
+        const now = new Date();
+        const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+        const today = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999));
+        const ninetyDaysAgo = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate() - 90, 0, 0, 0, 0));
 
         const [employee, attendance, leaves, payroll] = await Promise.all([
             // 1. Profile
@@ -88,19 +86,18 @@ export const getEmployeeOverviewCached = unstable_cache(
                 where: { id: employeeId },
                 select: employeeSelect
             }),
-            // 2. Recent Attendance
+            // 2. Last 90 Days Attendance (for calendar navigation)
             prisma.attendance.findMany({
                 where: {
                     employeeId,
-                    date: { gte: thirtyDaysAgo, lte: today }
+                    date: { gte: ninetyDaysAgo, lte: today }
                 },
                 orderBy: { date: "desc" },
-                take: 30, // Limit to recent
                 select: attendanceSelect
             }),
             // 3. Recent Leaves
             prisma.leaveRequest.findMany({
-                where: { employeeId }, // Index: [employeeId, createdAt]
+                where: { employeeId },
                 orderBy: { createdAt: "desc" },
                 take: 5,
                 select: leaveSelect
@@ -113,15 +110,16 @@ export const getEmployeeOverviewCached = unstable_cache(
         ]);
 
         const duration = performance.now() - start;
-        if (duration > 200) {
-            console.warn(`⚠️ Slow Aggregated Fetch for ${employeeId}: ${duration.toFixed(2)}ms`);
-        }
+        console.log(`📊 [lib/data.ts] Employee ${employeeId}: ${attendance.length} attendance records in ${duration.toFixed(0)}ms (${ninetyDaysAgo.toISOString().split('T')[0]} → ${today.toISOString().split('T')[0]})`);
 
-        // summary calculations
+        // summary calculations (current month in IST)
+        const monthStart = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), 1, 0, 0, 0, 0));
+        const monthEnd = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+        const currentMonthAttendance = attendance.filter(a => a.date >= monthStart && a.date <= monthEnd);
         const attendanceSummary = {
-            present: attendance.filter(a => a.status === "PRESENT").length,
-            absent: attendance.filter(a => a.status === "ABSENT").length,
-            halfDay: attendance.filter(a => a.status === "HALF_DAY").length,
+            present: currentMonthAttendance.filter(a => a.status === "PRESENT").length,
+            absent: currentMonthAttendance.filter(a => a.status === "ABSENT").length,
+            halfDay: currentMonthAttendance.filter(a => a.status === "HALF_DAY").length,
         };
 
         return {
@@ -133,10 +131,7 @@ export const getEmployeeOverviewCached = unstable_cache(
                 attendance: attendanceSummary
             }
         };
-    },
-    ["employee-overview-aggregate-v2"], // Key
-    { tags: [TAGS.employees, TAGS.attendance, TAGS.leaves, TAGS.payroll], revalidate: 300 } // Increased from 60s to 5min for better caching
-);
+};
 
 // -----------------------------------------------------------------------------
 // LEGACY CACHED FETCHERS (Simplified)

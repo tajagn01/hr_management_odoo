@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useEmployees } from "@/lib/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/hooks/query-keys";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -32,46 +35,21 @@ interface TeamMember {
 }
 
 export default function TeamPage() {
-    const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-    const [filteredMembers, setFilteredMembers] = useState<TeamMember[]>([]);
-    const [loading, setLoading] = useState(true);
+    const queryClient = useQueryClient();
+    const { data: employeesData, isLoading: loading, isFetching: isRefreshing, refetch } = useEmployees();
+    const teamMembers: TeamMember[] = employeesData?.employees || [];
     const [searchQuery, setSearchQuery] = useState("");
-    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    const fetchTeamMembers = async () => {
-        setIsRefreshing(true);
-        try {
-            const res = await fetch("/api/employees");
-            const data = await res.json();
-            setTeamMembers(data.employees || []);
-            setFilteredMembers(data.employees || []);
-            setLoading(false);
-        } catch (error) {
-            console.error("Error fetching team members:", error);
-            setLoading(false);
-        } finally {
-            setIsRefreshing(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchTeamMembers();
-    }, []);
-
-    useEffect(() => {
-        if (searchQuery.trim() === "") {
-            setFilteredMembers(teamMembers);
-        } else {
-            const query = searchQuery.toLowerCase();
-            const filtered = teamMembers.filter(
-                (member) =>
-                    member.fullName.toLowerCase().includes(query) ||
-                    member.employeeCode.toLowerCase().includes(query) ||
-                    member.department.toLowerCase().includes(query) ||
-                    member.designation.toLowerCase().includes(query)
-            );
-            setFilteredMembers(filtered);
-        }
+    const filteredMembers = useMemo(() => {
+        if (searchQuery.trim() === "") return teamMembers;
+        const query = searchQuery.toLowerCase();
+        return teamMembers.filter(
+            (member) =>
+                member.fullName.toLowerCase().includes(query) ||
+                member.employeeCode.toLowerCase().includes(query) ||
+                member.department.toLowerCase().includes(query) ||
+                member.designation.toLowerCase().includes(query)
+        );
     }, [searchQuery, teamMembers]);
 
     if (loading) {
@@ -92,7 +70,7 @@ export default function TeamPage() {
                         Manage and view your team members ({teamMembers.length} total)
                     </p>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchTeamMembers} disabled={isRefreshing}>
+                <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.employees.all })} disabled={isRefreshing}>
                     <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                     Refresh
                 </Button>
@@ -134,7 +112,7 @@ export default function TeamPage() {
                                 <div className="flex items-start gap-3">
                                     <Avatar className="h-12 w-12">
                                         <AvatarFallback className="text-sm font-semibold">
-                                            {member.fullName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                                            {member.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)}
                                         </AvatarFallback>
                                     </Avatar>
                                     <div className="flex-1 min-w-0">

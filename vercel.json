@@ -3,6 +3,14 @@
         {
             "path": "/api/cron/auto-mark-attendance",
             "schedule": "0 17 * * 1-6"
+        },
+        {
+            "path": "/api/cron/auto-checkout",
+            "schedule": "45 11 * * 1-6"
+        },
+        {
+            "path": "/api/cron/birthday",
+            "schedule": "30 18 * * *"
         }
     ]
 }

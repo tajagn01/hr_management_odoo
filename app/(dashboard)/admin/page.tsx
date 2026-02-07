@@ -28,7 +28,10 @@ import {
   MessageSquare,
   ArrowRight,
   Sparkles,
-  Plus
+  Plus,
+  ShieldCheck,
+  ClipboardList,
+  CalendarOff
 } from "lucide-react";
 
 // Memoize sub-components to prevent re-renders on parent state changes
@@ -52,10 +55,17 @@ export default function AdminPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Use UTC day boundaries to avoid local timezone mismatches between client and server
+  // Use Indian Standard Time (IST = UTC+5:30) day boundaries for consistent data across pages
+  // This matches the auto-mark scheduler which also runs at 5 PM IST
   const today = useMemo(() => {
     const now = new Date();
-    return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    // Convert to IST: UTC+5:30
+    const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000) - (now.getTimezoneOffset() * 60 * 1000));
+    return new Date(Date.UTC(
+      istTime.getUTCFullYear(),
+      istTime.getUTCMonth(),
+      istTime.getUTCDate()
+    ));
   }, []);
 
   const tomorrow = useMemo(() => {
@@ -69,7 +79,17 @@ export default function AdminPage() {
       const res = await fetch("/api/employees?includePayroll=true&excludeManagers=true");
       return res.json();
     },
-    // Use keepPreviousData to show stale data while refetching if needed (rare due to Infinity staleTime)
+    placeholderData: keepPreviousData,
+    staleTime: Infinity,
+  });
+
+  // 1b. Fetch all users to get manager count
+  const { data: allUsersData } = useQuery({
+    queryKey: ['employees', 'all-users'],
+    queryFn: async () => {
+      const res = await fetch("/api/employees?includePayroll=false");
+      return res.json();
+    },
     placeholderData: keepPreviousData,
     staleTime: Infinity,
   });
@@ -96,12 +116,12 @@ export default function AdminPage() {
     staleTime: Infinity,
   });
 
-  // 3b. Fetch Recent Leave Requests (Last 5, newest first, from last 2 days)
+  // 3b. Fetch Recent Leave Requests (Last 5, newest first)
   const { data: recentLeaveData } = useQuery({
     queryKey: ['leave-requests', 'recent'],
     queryFn: async () => {
       console.log("🔄 [ADMIN] Fetching recent leave requests...");
-      const res = await fetch("/api/leave?recentDays=2&limit=5");
+      const res = await fetch("/api/leave?limit=5");
       const data = await res.json();
       console.log("✅ [ADMIN] Recent leave data received:", data);
       return data;
@@ -181,6 +201,22 @@ export default function AdminPage() {
     };
   }, [queryClient]);
 
+  // Keep today's attendance breakdown in sync with real-time events
+  useEffect(() => {
+    const onAttendanceChange = () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance-status', 'dashboard', today.toISOString()] });
+      queryClient.refetchQueries({ queryKey: ['attendance-status', 'dashboard', today.toISOString()] });
+    };
+
+    window.addEventListener('attendance:checkin', onAttendanceChange as EventListener);
+    window.addEventListener('attendance:checkout', onAttendanceChange as EventListener);
+
+    return () => {
+      window.removeEventListener('attendance:checkin', onAttendanceChange as EventListener);
+      window.removeEventListener('attendance:checkout', onAttendanceChange as EventListener);
+    };
+  }, [queryClient, today]);
+
   // Combine isFetching from all queries
   const isGlobalFetching = useQueryClient().isFetching() > 0;
 
@@ -239,7 +275,7 @@ export default function AdminPage() {
     // Group By Status
     const presentCount = calculatedStatuses.filter((r: any) => r.status === 'PRESENT' || r.status === 'HALF_DAY').length;
     const lateCount = calculatedStatuses.filter((r: any) => r.status === 'LATE').length;
-    const onLeaveCount = calculatedStatuses.filter((r: any) => r.status === 'ON_LEAVE').length;
+    const onLeaveCount = calculatedStatuses.filter((r: any) => r.status === 'LEAVE').length;
     const absentCount = calculatedStatuses.filter((r: any) => r.status === 'ABSENT').length;
 
     // Note: lateCount is typically considered "Present" but late. 
@@ -251,6 +287,12 @@ export default function AdminPage() {
     const pendingLeaves = allLeaves.filter((lr: any) =>
       lr.status === "PENDING" && allEmployeeIds.has(lr.employeeId)
     ).length;
+    const approvedLeaves = allLeaves.filter((lr: any) => lr.status === "APPROVED").length;
+    const rejectedLeaves = allLeaves.filter((lr: any) => lr.status === "REJECTED").length;
+
+    // Manager count from all users
+    const allUsers = allUsersData?.employees || [];
+    const managerCount = allUsers.filter((emp: any) => emp.user?.role === "MANAGER").length;
 
     // Combine with realtime stats for "Present Today" if websocket pushed updates
     const displayPresent = attendanceStats.presentToday > 0 ? attendanceStats.presentToday : totalPresent;
@@ -262,9 +304,12 @@ export default function AdminPage() {
       lateToday: lateCount,
       onLeaveToday: onLeaveCount,
       pendingLeaves,
+      approvedLeaves,
+      rejectedLeaves,
+      managerCount,
       monthlyPayroll,
     };
-  }, [employeesData, statusData, leaveData, attendanceStats]);
+  }, [employeesData, statusData, leaveData, attendanceStats, allUsersData]);
 
 
   const recentLeaveRequestsList = useMemo(() => {
@@ -331,7 +376,7 @@ export default function AdminPage() {
       value: stats.absentToday.toString(),
       change: "Today",
       trend: "down",
-      icon: UserCheck, // Or a generic Alert icon
+      icon: UserCheck,
       lightColor: "bg-red-100 dark:bg-red-900",
       textColor: "text-red-600 dark:text-red-400",
     },
@@ -343,6 +388,24 @@ export default function AdminPage() {
       icon: Clock,
       lightColor: "bg-amber-100 dark:bg-amber-900",
       textColor: "text-amber-600 dark:text-amber-400",
+    },
+    {
+      title: "On Leave",
+      value: stats.onLeaveToday.toString(),
+      change: "Today",
+      trend: "neutral",
+      icon: CalendarOff,
+      lightColor: "bg-teal-100 dark:bg-teal-900",
+      textColor: "text-teal-600 dark:text-teal-400",
+    },
+    {
+      title: "Pending Leaves",
+      value: stats.pendingLeaves.toString(),
+      change: `${stats.approvedLeaves} approved`,
+      trend: "neutral",
+      icon: ClipboardList,
+      lightColor: "bg-orange-100 dark:bg-orange-900",
+      textColor: "text-orange-600 dark:text-orange-400",
     },
   ];
 
@@ -407,13 +470,12 @@ export default function AdminPage() {
                 <div className="flex items-center gap-1.5 mt-2 text-xs">
                   {stat.trend === "up" ? (
                     <TrendingUp className="h-3.5 w-3.5 text-green-500" />
-                  ) : (
+                  ) : stat.trend === "down" ? (
                     <TrendingDown className="h-3.5 w-3.5 text-red-500" />
-                  )}
-                  <span className={stat.trend === "up" ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
+                  ) : null}
+                  <span className={stat.trend === "up" ? "text-green-600 font-medium" : stat.trend === "down" ? "text-red-600 font-medium" : "text-muted-foreground font-medium"}>
                     {stat.change}
                   </span>
-                  <span className="text-muted-foreground opacity-70">vs last month</span>
                 </div>
               </div>
             ))}
@@ -425,11 +487,11 @@ export default function AdminPage() {
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Quick Actions</h2>
           <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2 rounded-xl border-dashed border-2 hover:border-solid hover:border-primary/50 hover:bg-primary/5" asChild>
-              <a href="/admin/employees/new">
+              <a href="/admin/employees">
                 <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="text-xs font-medium">Add Employee</span>
+                <span className="text-xs font-medium">Employees</span>
               </a>
             </Button>
             <Button variant="outline" className="h-20 flex flex-col items-center justify-center gap-2 rounded-xl border-dashed border-2 hover:border-solid hover:border-primary/50 hover:bg-primary/5" asChild>
@@ -482,8 +544,8 @@ export default function AdminPage() {
                     }`} />
                   <div className="p-3 flex-1 flex items-center gap-3">
                     <div className="flex flex-col items-center justify-center h-12 w-12 rounded-lg bg-muted/50 border shrink-0">
-                      <span className="text-xs font-bold uppercase text-muted-foreground">{new Date(request.startDate).toLocaleDateString('en-US', { month: 'short' })}</span>
-                      <span className="text-lg font-bold leading-none">{new Date(request.startDate).getDate()}</span>
+                      <span className="text-xs font-bold uppercase text-muted-foreground">{new Date(request.startDate).toLocaleDateString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' })}</span>
+                      <span className="text-lg font-bold leading-none">{new Date(request.startDate).toLocaleDateString('en-IN', { day: 'numeric', timeZone: 'Asia/Kolkata' })}</span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
@@ -531,7 +593,7 @@ export default function AdminPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {statsCards.map((stat, index) => (
           <Card key={index} className="overflow-hidden">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -547,13 +609,12 @@ export default function AdminPage() {
               <div className="flex items-center text-xs mt-1">
                 {stat.trend === "up" ? (
                   <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-                ) : (
+                ) : stat.trend === "down" ? (
                   <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
-                )}
-                <span className={stat.trend === "up" ? "text-green-500" : "text-red-500"}>
+                ) : null}
+                <span className={stat.trend === "up" ? "text-green-500" : stat.trend === "down" ? "text-red-500" : "text-muted-foreground"}>
                   {stat.change}
                 </span>
-                <span className="text-muted-foreground ml-1">from last month</span>
               </div>
             </CardContent>
           </Card>
