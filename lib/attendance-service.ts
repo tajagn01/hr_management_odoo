@@ -2,10 +2,8 @@ import { prisma } from '@/lib/prisma';
 
 export enum AttendanceState {
     PRESENT = 'PRESENT',
-    LATE = 'LATE',
     ABSENT = 'ABSENT',
     LEAVE = 'LEAVE',
-    HOLIDAY = 'HOLIDAY',
     HALF_DAY = 'HALF_DAY'
 }
 
@@ -49,10 +47,10 @@ export async function calculateAttendanceStatus(
     const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
     const dayEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 
-    // 1. Check if HOLIDAY (Sunday or company holiday)
+    // 1. Check if Sunday (no attendance needed)
     const dayOfWeek = date.getDay(); // 0 = Sunday
-    if (!config.workingDays.includes(dayOfWeek)) {
-        return AttendanceState.HOLIDAY;
+    if (dayOfWeek === 0) {
+        return AttendanceState.ABSENT; // Sundays are holidays, no attendance expected
     }
 
     // 2. Check if ON_LEAVE (approved leave exists)
@@ -87,35 +85,7 @@ export async function calculateAttendanceStatus(
         return AttendanceState.ABSENT;
     }
 
-    // 4. Determine if LATE or PRESENT
-    const checkInTime = new Date(attendance.checkIn);
-    const [hours, minutes] = config.officeStartTime.split(':').map(Number);
-
-    // IST is UTC+5:30, so 9:00 AM IST = 3:30 AM UTC
-    // Construct office start time in IST for THIS specific day
-    const IST_OFFSET_HOURS = 5;
-    const IST_OFFSET_MINUTES = 30;
-
-    // Create office start time in UTC by subtracting IST offset from the IST office time
-    const officeStart = new Date(Date.UTC(
-        date.getUTCFullYear(),
-        date.getUTCMonth(),
-        date.getUTCDate(),
-        hours - IST_OFFSET_HOURS,  // Convert IST hour to UTC
-        minutes - IST_OFFSET_MINUTES, // Convert IST minutes to UTC
-        0,
-        0
-    ));
-
-    const graceEndTime = new Date(officeStart);
-    graceEndTime.setMinutes(graceEndTime.getMinutes() + config.gracePeriodMinutes);
-
-    // If check-in is later than grace period end time -> LATE
-    if (checkInTime.getTime() > graceEndTime.getTime()) {
-        return AttendanceState.LATE;
-    }
-
-    // 5. Check for HALF_DAY logic (applied on checkout or end of day)
+    // 4. Check for HALF_DAY logic (applied on checkout or end of day)
     if (attendance.checkOut && attendance.workingHours) {
         if (attendance.workingHours < config.minimumHoursForFullDay &&
             attendance.workingHours >= config.minimumHoursForHalfDay) {
@@ -141,9 +111,9 @@ export async function getBulkAttendanceStatus(
     const dayStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
     const dayEnd = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
 
-    // 1. Check Holiday (O(1) query)
+    // 1. Check if Sunday (O(1) query)
     const dayOfWeek = date.getDay();
-    let isHoliday = !config.workingDays.includes(dayOfWeek);
+    let isSunday = dayOfWeek === 0;
 
     // 2. Fetch ALL Attendance Records (O(1) query)
     const attendanceRecords = await prisma.attendance.findMany({
@@ -170,31 +140,9 @@ export async function getBulkAttendanceStatus(
     approvedLeaves.forEach(l => leaveMap.add(l.employeeId));
 
     // 4. In-Memory Calculation (O(N) but extremely fast)
-    // Pre-calculate office times for lateness logic in IST
-    const [hours, minutes] = config.officeStartTime.split(':').map(Number);
-
-    // IST is UTC+5:30, so 9:00 AM IST = 3:30 AM UTC
-    const IST_OFFSET_HOURS = 5;
-    const IST_OFFSET_MINUTES = 30;
-
-    // Create office start time in UTC by subtracting IST offset
-    const officeStart = new Date(Date.UTC(
-        date.getUTCFullYear(),
-        date.getUTCMonth(),
-        date.getUTCDate(),
-        hours - IST_OFFSET_HOURS,
-        minutes - IST_OFFSET_MINUTES,
-        0,
-        0
-    ));
-
-    const graceEndTime = new Date(officeStart);
-    graceEndTime.setMinutes(graceEndTime.getMinutes() + config.gracePeriodMinutes);
-    const graceTimeMs = graceEndTime.getTime();
-
     return employeeIds.map(employeeId => {
-        // A. Check Holiday
-        if (isHoliday) return { employeeId, status: AttendanceState.HOLIDAY };
+        // A. Check Sunday
+        if (isSunday) return { employeeId, status: AttendanceState.ABSENT };
 
         // B. Check Leave
         if (leaveMap.has(employeeId)) return { employeeId, status: AttendanceState.LEAVE };
@@ -203,11 +151,7 @@ export async function getBulkAttendanceStatus(
         const record = attendanceMap.get(employeeId);
         if (!record || !record.checkIn) return { employeeId, status: AttendanceState.ABSENT };
 
-        // D. Check Late
-        const checkInTime = new Date(record.checkIn).getTime();
-        if (checkInTime > graceTimeMs) return { employeeId, status: AttendanceState.LATE };
-
-        // E. Check Half Day
+        // D. Check Half Day
         if (record.checkOut && record.workingHours) {
             if (record.workingHours < config.minimumHoursForFullDay &&
                 record.workingHours >= config.minimumHoursForHalfDay) {

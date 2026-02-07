@@ -322,7 +322,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid type. Must be 'checkIn' or 'checkOut'" }, { status: 400 });
     }
 
-    revalidateTag(TAGS.attendance); // Invalidate cache
+    revalidateTag(TAGS.attendance, "max"); // Invalidate cache
 
     return NextResponse.json({
       message: `${type === "checkIn" ? "Checked in" : "Checked out"} successfully`,

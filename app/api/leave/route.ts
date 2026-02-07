@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Invalidate cache
-    revalidateTag(TAGS.leaves);
+    revalidateTag(TAGS.leaves, "max");
 
     // Notify all admins about new leave request
     try {
@@ -182,7 +182,7 @@ export async function PUT(request: NextRequest) {
     });
 
     // Invalidate cache
-    revalidateTag(TAGS.leaves);
+    revalidateTag(TAGS.leaves, "max");
 
     // Notify employee about leave status change
     try {

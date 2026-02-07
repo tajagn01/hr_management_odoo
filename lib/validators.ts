@@ -30,7 +30,7 @@ export const attendanceSchema = z.object({
   date: z.string().or(z.date()),
   checkIn: z.string().optional(),
   checkOut: z.string().optional(),
-  status: z.enum(["Present", "Absent", "Late", "Half Day"]),
+  status: z.enum(["Present", "Absent", "Half Day", "Leave"]),
 });
 
 // Leave request validation schemas

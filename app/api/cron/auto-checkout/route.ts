@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
                 },
                 checkIn: { not: null },
                 checkOut: null,
-                status: { in: ['PRESENT', 'LATE'] },
+                status: { in: ['PRESENT', 'HALF_DAY'] },
             },
             include: {
                 employee: {
