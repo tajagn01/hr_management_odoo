@@ -65,7 +65,7 @@ export default function Navbar() {
   const userRole = (session?.user as any)?.role || "EMPLOYEE";
 
   // Use real notifications from context
-  const { notifications, unreadCount, markAllAsRead, markAsRead } = useNotifications();
+  const { notifications, unreadCount, markAllAsRead, markAsRead, clearAllNotifications } = useNotifications();
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -184,10 +184,25 @@ export default function Navbar() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80 rounded-xl p-0">
                 <div className="flex items-center justify-between px-4 py-3 border-b">
-                  <h3 className="font-semibold">Notifications</h3>
-                  <Badge variant="secondary" className="text-xs">
-                    {unreadCount === 0 ? "All read" : `${unreadCount} new`}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold">Notifications</h3>
+                    <Badge variant="secondary" className="text-xs">
+                      {unreadCount === 0 ? "All read" : `${unreadCount} new`}
+                    </Badge>
+                  </div>
+                  {notifications.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-muted-foreground hover:text-red-500"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        clearAllNotifications();
+                      }}
+                    >
+                      Clear all
+                    </Button>
+                  )}
                 </div>
                 <ScrollArea className="h-80">
                   <div className="p-2">

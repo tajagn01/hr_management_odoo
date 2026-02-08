@@ -26,6 +26,7 @@ interface NotificationContextType {
   isLoading: boolean;
   markAsRead: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
 }
 
@@ -75,7 +76,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const handleNewNotification = (notification: any) => {
       console.log("📥 Received new notification via Socket.IO:", notification);
-      
+
       // Ensure notification has required fields
       const formattedNotification: Notification = {
         id: notification.id,
@@ -87,7 +88,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         metadata: notification.metadata || null,
         createdAt: notification.createdAt || new Date().toISOString(),
       };
-      
+
       // Check if notification already exists (prevent duplicates from API fetch)
       setNotifications((prev) => {
         const exists = prev.some((n) => n.id === formattedNotification.id);
@@ -161,12 +162,29 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  // Clear all notifications (delete)
+  const clearAllNotifications = useCallback(async () => {
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setNotifications([]);
+        setUnreadCount(0);
+      }
+    } catch (error) {
+      console.error("Failed to clear notifications:", error);
+    }
+  }, []);
+
   const value: NotificationContextType = {
     notifications,
     unreadCount,
     isLoading,
     markAsRead,
     markAllAsRead,
+    clearAllNotifications,
     refreshNotifications: fetchNotifications,
   };
 
