@@ -10,6 +10,12 @@ import {
 import { updateMonthlyAttendance } from "@/lib/attendance-aggregator";
 import { logger } from "@/lib/logger";
 
+// Helper function to check if a date is a weekend (Saturday or Sunday)
+function isWeekend(date: Date): boolean {
+  const day = date.getDay();
+  return day === 0 || day === 6; // 0 = Sunday, 6 = Saturday
+}
+
 // GET attendance records
 export async function GET(request: NextRequest) {
   try {
@@ -178,6 +184,13 @@ export async function POST(request: NextRequest) {
 
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Weekend validation - Only block employees, allow admins to mark attendance
+    if (type === "checkIn" && user.role === "EMPLOYEE" && isWeekend(now)) {
+      return NextResponse.json({
+        error: "Weekend - Attendance not required. Enjoy your day off! 🎉"
+      }, { status: 400 });
+    }
 
     // Check if attendance record exists for today
     let attendance = await prisma.attendance.findUnique({

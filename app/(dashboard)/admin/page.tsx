@@ -51,15 +51,26 @@ export default function AdminPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Calculate "today" in IST timezone to ensure consistent date across local and production
+  // Production server is in UTC, so we need to explicitly calculate IST dates
   const today = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+    const now = new Date();
+    const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+
+    // Create date at midnight IST
+    const d = new Date(Date.UTC(
+      istNow.getUTCFullYear(),
+      istNow.getUTCMonth(),
+      istNow.getUTCDate(),
+      0, 0, 0, 0
+    ));
     return d;
   }, []);
 
   const tomorrow = useMemo(() => {
     const d = new Date(today);
-    d.setDate(d.getDate() + 1);
+    d.setUTCDate(d.getUTCDate() + 1);
     return d;
   }, [today]);
 
@@ -510,7 +521,7 @@ export default function AdminPage() {
                 <CardDescription>Real-time attendance breakdown</CardDescription>
               </CardHeader>
               <CardContent>
-                <MemoizedAttendancePieChart 
+                <MemoizedAttendancePieChart
                   data={{
                     present: stats.presentToday,
                     absent: stats.absentToday,
