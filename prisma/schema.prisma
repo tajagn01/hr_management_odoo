@@ -49,17 +49,24 @@ model User {
   email               String      @unique
   password            String
   role                Role        @default(EMPLOYEE)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
+  // Password reset fields
+  resetToken          String?
+  resetTokenExpiry    DateTime?
+  
+  // Email verification (existing)
   isActive            Boolean     @default(true)
   emailVerified       Boolean     @default(false)
   verificationToken   String?
   verificationTokenExpiry DateTime?
-
+  
+  // Relations
   employee            Employee?
   sessions            Session[]
   notifications       Notification[]
-
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  sentNotifications   Notification[] @relation("SentBy")
 }
 
 //////////////////////////////////////////////////
@@ -81,7 +88,7 @@ model Employee {
   profileCompleted Boolean   @default(false) // New: Track if profile setup is complete
   managerId       String?    // Manager relationship (nullable for top-level employees)
 
-  user            User       @relation(fields: [userId], references: [id])
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   manager         Employee?  @relation("ManagerToEmployees", fields: [managerId], references: [id])
   managedEmployees Employee[] @relation("ManagerToEmployees")
   attendance      Attendance[]
@@ -113,7 +120,7 @@ model Attendance {
   checkOut    DateTime?
   workingHours Float?            // Working hours calculated on checkout
 
-  employee    Employee           @relation(fields: [employeeId], references: [id])
+  employee    Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   createdAt   DateTime           @default(now())
 
@@ -143,7 +150,7 @@ model LeaveRequest {
   approvedAt    DateTime?
   adminComment  String?
 
-  employee      Employee    @relation(fields: [employeeId], references: [id])
+  employee      Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -237,7 +244,7 @@ model Payroll {
 
 
   @@index([employeeId])
-  employee      Employee  @relation(fields: [employeeId], references: [id])
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -257,6 +264,10 @@ model Notification {
   metadata  Json?    // Additional data (leaveId, employeeId, etc.)
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Sender relation (optional, for system notifications it's null)
+  sentById  String?
+  sentBy    User?    @relation("SentBy", fields: [sentById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -264,6 +275,7 @@ model Notification {
   @@index([userId])
   @@index([userId, read])
   @@index([userId, createdAt])
+  @@index([sentById])
 }
 
 //////////////////////////////////////////////////

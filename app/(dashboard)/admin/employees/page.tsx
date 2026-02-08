@@ -93,7 +93,7 @@ export default function AdminEmployeesPage() {
       return res.json();
     },
     placeholderData: keepPreviousData,
-    staleTime: Infinity,
+    staleTime: 0, // Set to 0 to always fetch fresh data
   });
 
   // Extract employees from the response object
@@ -289,11 +289,10 @@ export default function AdminEmployeesPage() {
       <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
         <button
           onClick={() => { setActiveTab("employees"); setSearchQuery(""); setDepartmentFilter("all"); setStatusFilter("all"); }}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === "employees"
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "employees"
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
-          }`}
+            }`}
         >
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -303,11 +302,10 @@ export default function AdminEmployeesPage() {
         </button>
         <button
           onClick={() => { setActiveTab("managers"); setSearchQuery(""); setDepartmentFilter("all"); setStatusFilter("all"); }}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-            activeTab === "managers"
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "managers"
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
-          }`}
+            }`}
         >
           <div className="flex items-center gap-2">
             <UserCheck className="h-4 w-4" />

@@ -73,23 +73,27 @@ export async function GET(request: NextRequest) {
 
         for (const record of missingCheckouts) {
             const checkInTime = new Date(record.checkIn!);
-            const workingHours = (autoCheckoutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+            const rawWorkingHours = (autoCheckoutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
+
+            // Validate working hours (0-24)
+            const validatedWorkingHours = Math.max(0, Math.min(24, rawWorkingHours));
 
             // Determine status based on working hours
-            let status = record.status;
-            if (workingHours < 4) {
-                status = 'ABSENT' as any;
-            } else if (workingHours < 8) {
-                status = 'HALF_DAY' as any;
+            let status: "PRESENT" | "ABSENT" | "HALF_DAY" | "LEAVE" = record.status;
+            if (validatedWorkingHours < 4) {
+                status = "ABSENT";
+            } else if (validatedWorkingHours < 8) {
+                status = "HALF_DAY";
+            } else {
+                status = "PRESENT";
             }
 
             await prisma.attendance.update({
                 where: { id: record.id },
                 data: {
                     checkOut: autoCheckoutTime,
-                    workingHours: Math.round(workingHours * 100) / 100,
-                    // @ts-ignore
-                    status,
+                    workingHours: Math.round(validatedWorkingHours * 100) / 100,
+                    status: status,
                 },
             });
 
@@ -102,10 +106,9 @@ export async function GET(request: NextRequest) {
 
             results.push({
                 employee: record.employee.fullName,
-                employeeId: record.employeeId,
                 checkIn: record.checkIn,
-                autoCheckOut: autoCheckoutTime,
-                workingHours: Math.round(workingHours * 100) / 100,
+                checkOut: autoCheckoutTime,
+                workingHours: Math.round(validatedWorkingHours * 100) / 100,
                 status,
             });
         }

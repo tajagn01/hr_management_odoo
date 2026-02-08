@@ -173,3 +173,102 @@ export async function GET(request: NextRequest) {
         );
     }
 }
+
+export async function POST(request: NextRequest) {
+    try {
+        // Verify cron secret
+        const authHeader = request.headers.get("authorization");
+        if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Skip weekends (Saturday = 6, Sunday = 0)
+        const dayOfWeek = today.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            return NextResponse.json({
+                message: "Skipped: Weekend",
+                date: today.toISOString()
+            });
+        }
+
+        // Get all active employees
+        const employees = await prisma.employee.findMany({
+            where: {
+                user: {
+                    role: { in: ["EMPLOYEE", "MANAGER"] }
+                }
+            },
+            select: { id: true }
+        });
+
+        let markedAbsent = 0;
+        let skipped = 0;
+
+        for (const employee of employees) {
+            // Check if attendance already exists
+            const existingAttendance = await prisma.attendance.findUnique({
+                where: {
+                    employeeId_date: {
+                        employeeId: employee.id,
+                        date: today
+                    }
+                }
+            });
+
+            if (existingAttendance) {
+                skipped++;
+                continue;
+            }
+
+            // Check if employee has approved leave for today
+            const hasLeave = await prisma.leaveRequest.findFirst({
+                where: {
+                    employeeId: employee.id,
+                    status: "APPROVED",
+                    startDate: { lte: today },
+                    endDate: { gte: today }
+                }
+            });
+
+            if (hasLeave) {
+                // Mark as LEAVE instead of ABSENT
+                await prisma.attendance.create({
+                    data: {
+                        employeeId: employee.id,
+                        date: today,
+                        status: "LEAVE"
+                    }
+                });
+                skipped++;
+                continue;
+            }
+
+            // Mark as absent
+            await prisma.attendance.create({
+                data: {
+                    employeeId: employee.id,
+                    date: today,
+                    status: "ABSENT"
+                }
+            });
+            markedAbsent++;
+        }
+
+        return NextResponse.json({
+            success: true,
+            date: today.toISOString(),
+            markedAbsent,
+            skipped,
+            total: employees.length
+        });
+    } catch (error) {
+        console.error("Error in auto-mark attendance:", error);
+        return NextResponse.json(
+            { error: "Failed to auto-mark attendance" },
+            { status: 500 }
+        );
+    }
+}

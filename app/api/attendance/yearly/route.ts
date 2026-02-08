@@ -53,7 +53,6 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch yearly attendance records from pre-aggregated table
-        // @ts-ignore - Prisma client generation failed, ignoring missing model error
         const yearlyRecords = await prisma.yearlyAttendance.findMany({
             where: {
                 employeeId: { in: authorizedIds },

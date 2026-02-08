@@ -6,6 +6,9 @@ import { revalidateTag } from "next/cache";
 import { getLeavesCached, TAGS } from "@/lib/data";
 import { notifyAdmins } from "@/lib/notifications";
 import { createNotification } from "@/lib/notifications";
+import { leaveRequestCreateSchema, leaveRequestUpdateSchema, formatZodError } from "@/lib/validators";
+import { logger } from "@/lib/logger";
+import { MAX_LEAVE_DAYS } from "@/lib/constants";
 
 // GET leave requests
 export async function GET(request: NextRequest) {
@@ -39,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ leaveRequests });
   } catch (error) {
-    console.error("Error fetching leave requests:", error);
+    logger.error("Error fetching leave requests", error);
     return NextResponse.json({ error: "Failed to fetch leave requests" }, { status: 500 });
   }
 }
@@ -53,12 +56,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { employeeId, type, startDate, endDate, reason } = body;
 
-    // Validate required fields
-    if (!employeeId || !type || !startDate || !endDate) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    // Validate input with Zod
+    const validation = leaveRequestCreateSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json({
+        error: "Validation failed",
+        details: formatZodError(validation.error)
+      }, { status: 400 });
     }
+
+    const { employeeId, type, startDate, endDate, reason } = validation.data;
 
     // Calculate number of days (inclusive of both start and end dates)
     const start = new Date(startDate);
@@ -67,6 +75,15 @@ export async function POST(request: NextRequest) {
     // Normalize to start of day (midnight) to avoid timezone issues
     start.setHours(0, 0, 0, 0);
     end.setHours(0, 0, 0, 0);
+
+    // Validate that dates are not in the past
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (start < today) {
+      return NextResponse.json({
+        error: "Cannot create leave request for past dates"
+      }, { status: 400 });
+    }
 
     // Calculate difference in days
     const timeDiff = end.getTime() - start.getTime();
@@ -80,11 +97,55 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "End date must be on or after start date" }, { status: 400 });
     }
 
+    // Validate maximum leave days
+    if (days > MAX_LEAVE_DAYS) {
+      return NextResponse.json({
+        error: `Leave request cannot exceed ${MAX_LEAVE_DAYS} days`
+      }, { status: 400 });
+    }
+
+    // Check for overlapping leave requests
+    const overlappingLeave = await prisma.leaveRequest.findFirst({
+      where: {
+        employeeId,
+        status: { in: ["PENDING", "APPROVED"] },
+        OR: [
+          {
+            // New leave starts during existing leave
+            AND: [
+              { startDate: { lte: start } },
+              { endDate: { gte: start } }
+            ]
+          },
+          {
+            // New leave ends during existing leave
+            AND: [
+              { startDate: { lte: end } },
+              { endDate: { gte: end } }
+            ]
+          },
+          {
+            // New leave completely contains existing leave
+            AND: [
+              { startDate: { gte: start } },
+              { endDate: { lte: end } }
+            ]
+          }
+        ]
+      }
+    });
+
+    if (overlappingLeave) {
+      return NextResponse.json({
+        error: "You already have a leave request for overlapping dates"
+      }, { status: 400 });
+    }
+
     // Create leave request
     const leaveRequest = await prisma.leaveRequest.create({
       data: {
         employeeId,
-        type: type.toUpperCase(),
+        type: type.toUpperCase() as "PAID" | "SICK" | "UNPAID",
         startDate: start,
         endDate: end,
         days,
@@ -119,7 +180,7 @@ export async function POST(request: NextRequest) {
         },
       });
     } catch (error) {
-      console.error("Failed to send notification:", error);
+      logger.error("Failed to send leave request notification", error);
       // Don't fail the request if notification fails
     }
 
@@ -128,7 +189,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error creating leave request:", error);
+    logger.error("Error creating leave request", error);
     return NextResponse.json({ error: "Failed to submit leave request" }, { status: 500 });
   }
 }
@@ -151,22 +212,23 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { id, status, adminComment } = body;
 
-    if (!id || !status) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    // Validate input with Zod
+    const validation = leaveRequestUpdateSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json({
+        error: "Validation failed",
+        details: formatZodError(validation.error)
+      }, { status: 400 });
     }
 
-    // Validate status
-    if (!["APPROVED", "REJECTED"].includes(status.toUpperCase())) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-    }
+    const { id, status, adminComment } = validation.data;
 
     // Update leave request
     const leaveRequest = await prisma.leaveRequest.update({
       where: { id },
       data: {
-        status: status.toUpperCase(),
+        status: status.toUpperCase() as "APPROVED" | "REJECTED",
         approvedBy: user.id,
         approvedAt: new Date(),
         adminComment: adminComment || null,
@@ -206,7 +268,7 @@ export async function PUT(request: NextRequest) {
         });
       }
     } catch (error) {
-      console.error("Failed to send notification:", error);
+      logger.error("Failed to send leave status notification", error);
       // Don't fail the request if notification fails
     }
 
@@ -215,7 +277,7 @@ export async function PUT(request: NextRequest) {
       leaveRequest,
     });
   } catch (error) {
-    console.error("Error updating leave request:", error);
+    logger.error("Error updating leave request", error);
     return NextResponse.json({ error: "Failed to update leave request" }, { status: 500 });
   }
 }

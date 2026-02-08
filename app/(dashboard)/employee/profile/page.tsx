@@ -33,6 +33,7 @@ interface EmployeeData {
   department: string;
   designation: string;
   joiningDate: string;
+  dateOfBirth?: string | null;
   role?: string;
   profileImage?: string | null;
   user?: {
@@ -250,6 +251,21 @@ export default function EmployeeProfilePage() {
                 </label>
                 <div className="p-3 bg-muted rounded-lg">
                   {employeeData.user?.email || employeeData.email || "N/A"}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Date of Birth
+                </label>
+                <div className="p-3 bg-muted rounded-lg">
+                  {employeeData.dateOfBirth ? new Date(employeeData.dateOfBirth).toLocaleDateString('en-IN', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    timeZone: 'Asia/Kolkata'
+                  }) : "Not provided"}
                 </div>
               </div>
 

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { cache } from "@/lib/utils";
 import { revalidateTag } from "next/cache";
-import { getEmployeesCached, getEmployeeByIdCached, TAGS } from "@/lib/data";
+import { TAGS, getEmployeesCached, getEmployeeByIdCached } from "@/lib/data";
+import { getAuthorizedEmployeeIds } from "@/lib/access-control";
+import { logger } from "@/lib/logger";
 
 // GET employees (all or by email)
 export async function GET(request: NextRequest) {
@@ -76,6 +77,7 @@ export async function GET(request: NextRequest) {
           phone: true,
           joiningDate: true,
           profileImage: true,
+          profileCompleted: true, // Add this field for status determination
           user: {
             select: {
               email: true,
@@ -106,7 +108,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ employees, totalCount: employees.length });
   } catch (error) {
-    console.error("Error fetching employees:", error);
+    logger.error("Error fetching employees", error);
     return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 });
   }
 }

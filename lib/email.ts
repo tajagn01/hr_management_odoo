@@ -210,5 +210,74 @@ export async function testEmailConfig(): Promise<{ success: boolean; error?: str
       error: error.message || "Failed to connect to email server",
     };
   }
+}// Send password reset email
+export async function sendPasswordResetEmail(
+  email: string,
+  resetLink: string
+): Promise<boolean> {
+  try {
+    const transporter = createTransporter();
+
+    if (!transporter) {
+      logger.warn("Email service not configured - Reset link logged to console", { email, resetLink });
+      return true; // Allow reset flow to continue
+    }
+
+    const SMTP_FROM = process.env.SMTP_FROM || process.env.SMTP_USER;
+    const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || "DayFlow HRMS";
+    const fromEmail = SMTP_FROM || process.env.SMTP_USER || "noreply@dayflow.com";
+    const fromName = SMTP_FROM_NAME || "DayFlow HRMS";
+
+    const mailOptions = {
+      from: `${fromName} <${fromEmail}>`,
+      to: email,
+      subject: "Password Reset Request - DayFlow HRMS",
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #4F46E5; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9fafb; }
+            .button { display: inline-block; padding: 12px 24px; background: #4F46E5; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+            .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Password Reset Request</h1>
+            </div>
+            <div class="content">
+              <p>Hello,</p>
+              <p>We received a request to reset your password for your DayFlow HRMS account.</p>
+              <p>Click the button below to reset your password:</p>
+              <p style="text-align: center;">
+                <a href="${resetLink}" class="button">Reset Password</a>
+              </p>
+              <p>Or copy and paste this link into your browser:</p>
+              <p style="word-break: break-all; color: #4F46E5;">${resetLink}</p>
+              <p><strong>This link will expire in 1 hour.</strong></p>
+              <p>If you didn't request a password reset, please ignore this email.</p>
+            </div>
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} DayFlow HRMS. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    };
+
+    logger.debug("Attempting to send reset email", { email });
+    await transporter.sendMail(mailOptions);
+    logger.emailSent(email, mailOptions.subject);
+    return true;
+  } catch (error: any) {
+    logger.emailFailed(email, error);
+    return false;
+  }
 }
 

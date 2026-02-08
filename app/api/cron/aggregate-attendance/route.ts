@@ -14,10 +14,10 @@ export async function GET(request: Request) {
         const month = parseInt(searchParams.get("month") || (now.getMonth() + 1).toString());
 
         // Simple security check (optional: add CRON_SECRET env var check here)
-        // const authHeader = request.headers.get('authorization');
-        // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-        //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        // }
+        const authHeader = request.headers.get('authorization');
+        if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
 
         if (type === "monthly") {
             await aggregateAllEmployeesMonthly(year, month);

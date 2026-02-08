@@ -3,6 +3,8 @@ import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { TAGS } from "@/lib/data";
+import { payrollCreateSchema, payrollUpdateSchema, formatZodError } from "@/lib/validators";
+import { logger } from "@/lib/logger";
 
 // GET payroll records
 export async function GET(request: NextRequest) {
@@ -15,7 +17,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const employeeId = searchParams.get("employeeId");
 
-    console.log("API/PAYROLL GET:", { url: request.url, employeeId, user: session?.user?.email });
+    logger.info("Payroll GET request", { url: request.url, employeeId, user: session?.user?.email });
 
     // Get current user to check permissions
     // Optimized: Use session data directly
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ payroll });
   } catch (error) {
-    console.error("Error fetching payroll:", error);
+    logger.error("Error fetching payroll", error);
     return NextResponse.json({ error: "Failed to fetch payroll records" }, { status: 500 });
   }
 }
@@ -86,11 +88,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { employeeId, basicSalary, hra, allowances, deductions } = body;
 
-    if (!employeeId || basicSalary === undefined) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    // Validate input with Zod
+    const validation = payrollCreateSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json({
+        error: "Validation failed",
+        details: formatZodError(validation.error)
+      }, { status: 400 });
     }
+
+    const { employeeId, basicSalary, hra, allowances, deductions } = validation.data;
 
     const basic = Number(basicSalary);
     const hraVal = Number(hra || 0);
@@ -98,9 +106,17 @@ export async function POST(request: NextRequest) {
     const deduct = Number(deductions || 0);
     const netSalary = (basic + hraVal + allow) - deduct;
 
-    const payroll = await prisma.payroll.create({
-      data: {
+    const payroll = await prisma.payroll.upsert({
+      where: { employeeId },
+      create: {
         employeeId,
+        basicSalary: basic,
+        hra: hraVal,
+        allowances: allow,
+        deductions: deduct,
+        netSalary,
+      },
+      update: {
         basicSalary: basic,
         hra: hraVal,
         allowances: allow,
@@ -113,11 +129,11 @@ export async function POST(request: NextRequest) {
     revalidateTag(TAGS.employees, "max");
 
     return NextResponse.json({
-      message: "Payroll created",
+      message: "Payroll saved successfully",
       payroll
     }, { status: 201 });
   } catch (error) {
-    console.error("Error creating payroll:", error);
+    logger.error("Error creating/updating payroll", error);
     return NextResponse.json({ error: "Failed to create payroll" }, { status: 500 });
   }
 }
@@ -132,7 +148,7 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const { id, basicSalary, hra, allowances, deductions } = body;
-    console.log("API/PAYROLL PUT:", { id, basicSalary, hra, user: session?.user?.email });
+    logger.info("Payroll PUT request", { id, basicSalary, hra, user: session?.user?.email });
 
     if (!id) {
       return NextResponse.json({ error: "Payroll ID is required" }, { status: 400 });
@@ -179,7 +195,7 @@ export async function PUT(request: NextRequest) {
       payroll
     });
   } catch (error) {
-    console.error("Error updating payroll:", error);
+    logger.error("Error updating payroll", error);
     return NextResponse.json({ error: "Failed to update payroll" }, { status: 500 });
   }
 }

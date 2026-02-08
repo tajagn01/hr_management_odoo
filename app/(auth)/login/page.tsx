@@ -150,6 +150,16 @@ function LoginContent() {
             </div>
           </div>
 
+          {/* Forgot Password Link */}
+          <div className="flex justify-end">
+            <Link
+              href="/reset-password"
+              className="text-xs text-slate-400 hover:text-violet-400 transition-colors"
+            >
+              Forgot password?
+            </Link>
+          </div>
+
           {/* Primary CTA Button */}
           <Button
             type="submit"

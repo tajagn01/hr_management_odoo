@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
@@ -15,7 +14,7 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const employeeId = searchParams.get("employeeId");
         const year = parseInt(searchParams.get("year") || new Date().getFullYear().toString());
-        const month = searchParams.get("month") ? parseInt(searchParams.get("month")) : null;
+        const month = searchParams.get("month") ? parseInt(searchParams.get("month")!) : null;
 
         // Get current user
         const user = await prisma.user.findUnique({
@@ -46,7 +45,6 @@ export async function GET(request: NextRequest) {
         }
 
         // Fetch monthly attendance records
-        // @ts-ignore
         const monthlyRecords = await prisma.monthlyAttendance.findMany({
             where,
             include: {
