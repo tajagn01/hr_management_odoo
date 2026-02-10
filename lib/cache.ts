@@ -7,7 +7,7 @@ type CacheEntry<T> = {
 
 class InMemoryCache {
     private cache: Map<string, CacheEntry<any>> = new Map();
-
+    
     /**
      * Set a value in the cache
      * @param key Unique key
