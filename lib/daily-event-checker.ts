@@ -113,8 +113,9 @@ export async function checkDailyEvents(): Promise<DailyEventResult> {
             // --- BIRTHDAY CHECK ---
             if (emp.dateOfBirth) {
                 const birthDate = new Date(emp.dateOfBirth);
-                const birthMonth = birthDate.getUTCMonth() + 1;
-                const birthDay = birthDate.getUTCDate();
+                const istBirthDate = new Date(birthDate.getTime() + IST_OFFSET_MS); // Shift stored date to IST
+                const birthMonth = istBirthDate.getUTCMonth() + 1;
+                const birthDay = istBirthDate.getUTCDate();
 
                 if (birthMonth === month && birthDay === day) {
                     console.log(`Birthday found: ${emp.fullName}`);
@@ -137,9 +138,10 @@ export async function checkDailyEvents(): Promise<DailyEventResult> {
             // --- ANNIVERSARY CHECK ---
             if (emp.joiningDate) {
                 const joinDate = new Date(emp.joiningDate);
-                const joinMonth = joinDate.getUTCMonth() + 1;
-                const joinDay = joinDate.getUTCDate();
-                const joinYear = joinDate.getUTCFullYear();
+                const istJoinDate = new Date(joinDate.getTime() + IST_OFFSET_MS); // Shift stored date to IST
+                const joinMonth = istJoinDate.getUTCMonth() + 1;
+                const joinDay = istJoinDate.getUTCDate();
+                const joinYear = istJoinDate.getUTCFullYear();
 
                 const yearsCompleted = currentYear - joinYear;
 

@@ -28,13 +28,28 @@ const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 function getISTToday(): { today: Date; tomorrow: Date; dateKey: string } {
   const now = new Date();
-  const istTime = new Date(now.getTime() + IST_OFFSET_MS - (now.getTimezoneOffset() * 60 * 1000));
-  const today = new Date(Date.UTC(istTime.getUTCFullYear(), istTime.getUTCMonth(), istTime.getUTCDate()));
-  const tomorrow = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1));
+
+  // Create a date that represents "Now in IST" but as a UTC object 
+  // (so getUTCHours() returns IST hours)
+  const istNow = new Date(now.getTime() + IST_OFFSET_MS);
+
+  // Extract year, month, day from the IST-shifted date
+  const today = new Date(Date.UTC(
+    istNow.getUTCFullYear(),
+    istNow.getUTCMonth(),
+    istNow.getUTCDate(),
+    0, 0, 0, 0
+  ));
+
+  const tomorrow = new Date(today);
+  tomorrow.setUTCDate(today.getUTCDate() + 1);
+
   const dateKey = today.toISOString();
   return { today, tomorrow, dateKey };
 }
+
 function formatTimeIST(isoString: string): string {
+  // Add offset to convert UTC ISO string to IST time object
   return new Date(new Date(isoString).getTime() + IST_OFFSET_MS).toLocaleTimeString('en-IN', {
     hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC'
   });
